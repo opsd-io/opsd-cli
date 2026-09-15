@@ -13,5 +13,6 @@ jobs:
   release:
     uses: opsd-io/public-workflows/.github/workflows/release-please.yml@main
     with:
-      release-type: simple
+      release-type: ruby
+      version-file: lib/opsd/version.rb
       publish-bundle: true
