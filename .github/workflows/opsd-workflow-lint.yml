@@ -1,0 +1,13 @@
+name: Workflow lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    uses: opsd-io/public-workflows/.github/workflows/workflow-lint.yml@main
