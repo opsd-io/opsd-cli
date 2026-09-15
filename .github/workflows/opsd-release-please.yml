@@ -16,4 +16,5 @@ jobs:
       release-type: ruby
       version-file: lib/opsd/version.rb
       component: opsd
+      release-as: 1.0.1
       publish-bundle: true
