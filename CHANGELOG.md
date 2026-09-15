@@ -14,6 +14,18 @@
 
 - None yet.
 
+## [1.1.0](https://github.com/opsd-io/opsd-cli/compare/v1.0.1...v1.1.0) (2026-09-15)
+
+
+### Features
+
+* automate CLI version bumps ([#10](https://github.com/opsd-io/opsd-cli/issues/10)) ([8ddf094](https://github.com/opsd-io/opsd-cli/commit/8ddf094c741502f60ee0ab8c8ac2f0a14147a826))
+
+
+### Bug Fixes
+
+* configure Ruby release component ([#15](https://github.com/opsd-io/opsd-cli/issues/15)) ([7b63d61](https://github.com/opsd-io/opsd-cli/commit/7b63d611f666dca3e13b38799d1160c6f46e68af))
+
 ## [1.0.1](https://github.com/opsd-io/opsd-cli/compare/v1.0.0...v1.0.1) (2026-09-15)
 
 
