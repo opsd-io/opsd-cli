@@ -14,6 +14,11 @@ on:
         description: Git ref to build.
         required: true
         type: string
+      run-tests:
+        description: Run tests before building the bundle.
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -24,3 +29,4 @@ jobs:
     with:
       checkout-ref: ${{ inputs.checkout-ref || github.ref }}
       release-tag: ${{ inputs.release-tag || github.ref_name }}
+      run-tests: ${{ inputs.run-tests }}
