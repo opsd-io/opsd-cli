@@ -163,4 +163,37 @@ class KubernetesFoundationTest < Minitest::Test
       assert_includes main_tf, "module.postgres_2.urn"
     end
   end
+
+  def test_kubernetes_foundation_renders_optional_mysql_database
+    manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+    manifest_data.fetch("spec").fetch("databases") << {
+      "id" => "db-main",
+      "engine" => "mysql",
+      "profile" => "db-s-1vcpu-1gb",
+      "config" => { "database_name" => "app", "app_user_name" => "app" }
+    }
+    manifest = OPSd::Manifest.new(manifest_data)
+
+    Dir.mktmpdir("opsd-foundation-mysql-render") do |output_dir|
+      output_path = File.join(output_dir, "generated")
+      OPSd::Renderer.new(
+        app_root: File.expand_path("..", __dir__),
+        workspace_root: output_dir
+      ).render(
+        manifest,
+        output_path,
+        module_source: {
+          repo: "https://github.com/opsd-io/modules-digitalocean.git",
+          version: "v1.0.0",
+          commit: "abcdef1234567890"
+        }
+      )
+
+      main_tf = File.read(File.join(output_path, "main.tf"))
+      assert_includes main_tf, 'module "mysql"'
+      assert_includes main_tf, "modules-digitalocean.git//modules/managed-mysql?ref=v1.0.0"
+      assert_includes main_tf, "module.mysql.urn"
+      assert_includes main_tf, 'mysql_version        = "8"'
+    end
+  end
 end
