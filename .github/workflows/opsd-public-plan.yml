@@ -2,16 +2,19 @@ name: Public infrastructure plan
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: public-plan-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   plan:
     uses: opsd-io/public-workflows/.github/workflows/opsd-public-plan.yml@main
     with:
-      blueprint: kubernetes-foundation
-      variant: kubernetes
-      modules-ref: v1.0.0
+      compatibility-file: ci/public-compatibility.yaml

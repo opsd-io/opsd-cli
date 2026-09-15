@@ -13,6 +13,15 @@ provider "digitalocean" {
   token = var.digitalocean_token
 }
 
+<% postgres_databases = manifest.databases.select { |database| database.fetch("engine") == "postgres" } %>
+<% postgres_module_names = postgres_databases.each_index.map { |index| index.zero? ? "postgres" : "postgres_#{index + 1}" } %>
+<% mysql_databases = manifest.databases.select { |database| database.fetch("engine") == "mysql" } %>
+<% mysql_module_names = mysql_databases.each_index.map { |index| index.zero? ? "mysql" : "mysql_#{index + 1}" } %>
+<% project_optional_urns = [] %>
+<% project_optional_urns << "module.redis.urn" if manifest.primary_cache %>
+<% project_optional_urns.concat(postgres_module_names.map { |name| "module.#{name}.urn" }) %>
+<% project_optional_urns.concat(mysql_module_names.map { |name| "module.#{name}.urn" }) %>
+
 module "vpc" {
   count  = var.create_vpc ? 1 : 0
   source = "<%= module_package_root %>//modules/vpc"
@@ -32,10 +41,45 @@ locals {
     ] : [
       module.kubernetes.urn
     ],
-<% if manifest.primary_cache %>    [module.redis.urn]
-<% else %>    []
-<% end %>  )
+    [<%= project_optional_urns.join(", ") %>]
+  )
 }
+
+<% postgres_databases.each_with_index do |database, index| %>
+<% module_name = index.zero? ? "postgres" : "postgres_#{index + 1}" %>
+<% database_config = database.fetch("config", {}) %>
+module "<%= module_name %>" {
+  source = "<%= module_package_root %>//modules/managed-postgres"
+
+  name                 = "<%= manifest.metadata_name %>-<%= database.fetch("id") %>"
+  postgres_version     = "<%= database.fetch("version", "16") %>"
+  region               = var.region
+  size                 = "<%= profile_value(database.fetch("profile", "db-s-1vcpu-1gb")) %>"
+  node_count           = <%= database_config.fetch("node_count", 1) %>
+  private_network_uuid = local.vpc_uuid_effective
+  tags                 = var.cluster_tags
+  database_name       = "<%= database_config.fetch("database_name", "app") %>"
+  app_user_name        = "<%= database_config.fetch("app_user_name", "app") %>"
+}
+<% end %>
+
+<% mysql_databases.each_with_index do |database, index| %>
+<% module_name = index.zero? ? "mysql" : "mysql_#{index + 1}" %>
+<% database_config = database.fetch("config", {}) %>
+module "<%= module_name %>" {
+  source = "<%= module_package_root %>//modules/managed-mysql"
+
+  name                 = "<%= manifest.metadata_name %>-<%= database.fetch("id") %>"
+  mysql_version        = "<%= database.fetch("version", "8") %>"
+  region               = var.region
+  size                 = "<%= profile_value(database.fetch("profile", "db-s-1vcpu-1gb")) %>"
+  node_count           = <%= database_config.fetch("node_count", 1) %>
+  private_network_uuid = local.vpc_uuid_effective
+  tags                 = var.cluster_tags
+  database_name        = "<%= database_config.fetch("database_name", "app") %>"
+  app_user_name        = "<%= database_config.fetch("app_user_name", "app") %>"
+}
+<% end %>
 
 module "kubernetes" {
   source = "<%= module_package_root %>//modules/kubernetes"
