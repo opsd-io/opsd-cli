@@ -1,0 +1,5 @@
+.tmp/
+.opsd/
+.terraform/
+.terraform.lock.hcl
+dist/

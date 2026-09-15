@@ -1,0 +1,87 @@
+---
+# Example Kubernetes v2 environment for a cluster foundation path.
+apiVersion: opsd.io/v2alpha1
+kind: Environment
+
+metadata:
+  # Stable environment identifier used as the naming base during render.
+  name: acme-cluster-prod
+  environment: production
+  region: fra1
+  tags:
+    - acme
+    - production
+    - managed-by-opsd
+    - kubernetes
+  labels:
+    team: platform
+    role: cluster
+    runtime: kubernetes
+
+spec:
+  provider: digitalocean
+  origin:
+    # Blueprint provenance preserved after init.
+    blueprint: kubernetes-foundation
+    variant: kubernetes
+    family: kubernetes
+    stack: kubernetes-foundation
+    modules:
+      repo: https://github.com/opsd-io/modules-digitalocean.git
+      version: v1.0.0
+      commit: abcdef1234567890
+  defaults:
+    # Shared defaults reused during rendering.
+    project: acme-cluster-prod
+    network: shared
+  compute_groups:
+    - id: primary
+      # cluster represents the managed Kubernetes control-plane/node foundation.
+      type: cluster
+      role: cluster
+      replicas: 1
+      profile: s-2vcpu-4gb
+      # Optional provider-specific cluster and node pool settings.
+      config:
+        kubernetes_version: latest
+        node_pool_name: default
+        node_size: s-2vcpu-4gb
+        node_count: 1
+        node_auto_scale: false
+        ha: false
+        create_vpc: true
+      lifecycle:
+        # Protect the cluster from accidental Terraform destruction.
+        prevent_destroy: true
+      delivery:
+        # Placeholder delivery contract for cluster-level GitOps integration.
+        mode: gitops
+        source:
+          mode: github
+          github:
+            repository: acme/platform
+            branch: main
+        bootstrap: {}
+        env: {}
+        secret_env: {}
+  nodes: []
+  databases: []
+  caches: []
+  load_balancers: []
+  object_storage: []
+  cdn_endpoints: []
+  layers:
+    core:
+      enabled: true
+    bootstrap:
+      argocd:
+        enabled: true
+    observability:
+      enabled: false
+    tools:
+      enabled: false
+    apps:
+      enabled: false
+  policies:
+    drift_detection: strict
+    managed_output: true

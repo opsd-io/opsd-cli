@@ -1,0 +1,186 @@
+---
+contract_version: 1
+name: OPSd Contract
+api_version: opsd.io/v2alpha1
+kind: Environment
+manifest:
+  required_top_level_keys:
+    - apiVersion
+    - kind
+    - metadata
+    - spec
+  metadata:
+    required_keys:
+      - name
+      - environment
+      - region
+      - tags
+      - labels
+  provider_models:
+    digitalocean:
+      status: reference
+      required_spec_keys:
+        - provider
+        - origin
+        - defaults
+        - compute_groups
+        - nodes
+        - databases
+        - caches
+        - load_balancers
+        - object_storage
+        - cdn_endpoints
+        - policies
+      sections:
+        compute_groups:
+          role: replicated compute workloads
+          required_shape: array
+        nodes:
+          role: singleton compute workloads
+          required_shape: array
+        databases:
+          role: managed relational and similar databases
+          required_shape: array
+        caches:
+          role: managed caches
+          required_shape: array
+        load_balancers:
+          role: ingress and traffic distribution
+          required_shape: array
+        object_storage:
+          role: object storage and asset buckets
+          required_shape: array
+        cdn_endpoints:
+          role: CDN-backed delivery endpoints
+          required_shape: array
+        policies:
+          role: lifecycle and management policies
+          required_shape: mapping
+      supported_paths:
+        - id: digitalocean-reference-droplet-single
+          status: reference
+          family: droplet
+          stack: droplet-single-do-dns
+          blueprint: droplet-single
+          variant: vm
+          description: Reference single-droplet path with DNS handoff.
+        - id: digitalocean-reference-kubernetes-basic
+          status: reference
+          family: kubernetes
+          stack: kubernetes-basic
+          blueprint: kubernetes-basic
+          variant: default
+          description: Reference Kubernetes baseline path.
+        - id: digitalocean-reference-spaces-only
+          status: reference
+          family: spaces
+          stack: spaces-only
+          blueprint: spaces-only
+          variant: default
+          description: Reference object storage only path.
+    aws:
+      status: placeholder
+      note: Provider model reserved for future definition.
+      supported_paths: []
+    azure:
+      status: placeholder
+      note: Provider model reserved for future definition.
+      supported_paths: []
+    gcp:
+      status: placeholder
+      note: Provider model reserved for future definition.
+      supported_paths: []
+lifecycle:
+  provider_modules:
+    digitalocean:
+      versions:
+        supported:
+          - v1.0.0
+        deprecated: []
+        unsupported: []
+      upgrade_paths:
+        {}
+  opentofu:
+    versions:
+      supported:
+        - 1.10.0
+      deprecated:
+        - 1.9.0
+      unsupported:
+        - 1.8.0
+    upgrade_paths:
+      1.9.0: 1.10.0
+      1.8.0: 1.9.0
+  managed_policies:
+    versions:
+      supported:
+        - "2"
+      deprecated:
+        - "1"
+      unsupported:
+        - "0"
+    upgrade_paths:
+      "1": "2"
+      "0": "1"
+rule_packs:
+  security:
+    version: 1
+    description: Security and supply-chain guardrails for supported OPSd paths.
+    rules:
+      - id: OPSD-SEC-001
+        severity: blocking
+        summary: Production databases must use private networking and backups.
+        applies_to:
+          - databases
+      - id: OPSD-SUPPLY-004
+        severity: blocking
+        summary: Modules and providers must be pinned and provisioners are not allowed.
+        applies_to:
+          - spec.origin.modules
+          - modules
+          - providers
+  reliability:
+    version: 1
+    description: Reliability and recovery expectations for supported OPSd paths.
+    rules:
+      - id: OPSD-REL-001
+        severity: warning
+        summary: Highly available workloads should declare redundant compute or managed failover.
+        applies_to:
+          - compute_groups
+  cost:
+    version: 1
+    description: Cost guardrails and budget-shaping expectations.
+    rules:
+      - id: OPSD-COST-001
+        severity: warning
+        summary: Public load balancers should be explicit because they add recurring cost.
+        applies_to:
+          - load_balancers
+  maintainability:
+    version: 1
+    description: Maintainability and reversibility expectations.
+    rules:
+      - id: OPSD-MAINT-001
+        severity: warning
+        summary: Managed paths should preserve clear ownership boundaries and reversible handoff.
+        applies_to:
+          - manifest
+  upgradeability:
+    version: 1
+    description: Supported version and upgrade-path expectations.
+    rules:
+      - id: OPSD-UPGRADE-001
+        severity: warning
+        summary: Unsupported provider or OpenTofu versions should fail lifecycle checks.
+        applies_to:
+          - spec.provider
+  reversibility:
+    version: 1
+    description: Exit-first and client-owned handoff expectations.
+    rules:
+      - id: OPSD-EXIT-001
+        severity: blocking
+        summary: Rendered OpenTofu must remain client-owned and exportable without OPSd runtime access.
+        applies_to:
+          - rendered_stack

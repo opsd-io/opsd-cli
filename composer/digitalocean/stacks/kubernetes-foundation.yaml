@@ -1,0 +1,21 @@
+version: v1alpha1
+id: kubernetes-foundation
+family: kubernetes
+topology: cluster
+description: DigitalOcean Kubernetes core layer with VPC and project attachment.
+
+components:
+  required:
+    - vpc
+    - kubernetes
+    - project
+  optional:
+    - bastion
+    - managed-postgres
+    - managed-mysql
+    - managed-redis
+    - container-registry
+    - spaces-with-cdn
+
+maps_to:
+  scenario: kubernetes-foundation
