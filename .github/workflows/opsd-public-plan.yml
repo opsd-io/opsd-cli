@@ -1,0 +1,17 @@
+name: Public infrastructure plan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    uses: opsd-io/public-workflows/.github/workflows/opsd-public-plan.yml@main
+    with:
+      blueprint: kubernetes-foundation
+      variant: kubernetes
+      modules-ref: v1.0.0
