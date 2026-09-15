@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      release-tag:
+        description: Existing GitHub Release tag to receive the assets.
+        required: true
+        type: string
+      checkout-ref:
+        description: Git ref to build.
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,3 +21,6 @@ permissions:
 jobs:
   bundle:
     uses: opsd-io/public-workflows/.github/workflows/cli-release-bundle.yml@main
+    with:
+      checkout-ref: ${{ inputs.checkout-ref || github.ref }}
+      release-tag: ${{ inputs.release-tag || github.ref_name }}
