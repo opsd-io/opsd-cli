@@ -39,9 +39,18 @@ def command_text(command)
   Shellwords.join(command)
 end
 
-def run!(environment, command, chdir: ROOT)
+def run!(environment, command, chdir: ROOT, retries: 1, retry_delay: 0)
   puts "$ #{command_text(command)}"
-  return if system(environment, *command, chdir: chdir.to_s)
+  attempts = 0
+  loop do
+    return if system(environment, *command, chdir: chdir.to_s)
+
+    attempts += 1
+    break if attempts >= retries
+
+    warn "Command failed; retrying in #{retry_delay}s (attempt #{attempts + 1}/#{retries})"
+    sleep retry_delay
+  end
 
   abort "Command failed with status #{$?.exitstatus || 1}: #{command_text(command)}"
 end
@@ -116,7 +125,7 @@ stages.each_with_index do |stage, index|
   run!(child_env, opsd_command(opsd, "validate", "manifest", manifest_path.to_s))
   run!(child_env, opsd_command(opsd, "render", "manifest", manifest_path.to_s, "--output", rendered.to_s))
   assert_rendered_components!(manifest_path, rendered)
-  run!(child_env, [iac_tool, "init", "-backend=false", "-input=false"], chdir: rendered)
+  run!(child_env, [iac_tool, "init", "-backend=false", "-input=false"], chdir: rendered, retries: 3, retry_delay: 5)
   # The rendered directory is a generated artifact. Normalize it first, then
   # keep the check below as a guard against non-deterministic formatting.
   run!(child_env, [iac_tool, "fmt", "-recursive"], chdir: rendered)
