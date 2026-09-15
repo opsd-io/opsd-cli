@@ -15,10 +15,14 @@ class KubernetesFoundationTest < Minitest::Test
     Dir.mktmpdir("opsd-foundation-catalog") do |workspace|
       blueprint_root = File.join(workspace, "modules", "digitalocean", "blueprints")
       FileUtils.mkdir_p(blueprint_root)
-      FileUtils.cp(
-        File.expand_path("../../modules-digitalocean/blueprints/kubernetes-foundation.yaml", __dir__),
-        blueprint_root
-      )
+      File.write(File.join(blueprint_root, "kubernetes-foundation.yaml"), <<~YAML)
+        id: kubernetes-foundation
+        title: Kubernetes foundation
+        provider: digitalocean
+        variants:
+          - id: kubernetes
+            stack: kubernetes-foundation
+      YAML
 
       store = OPSd::TemplateStore.new(
         app_root: File.expand_path("..", __dir__),
