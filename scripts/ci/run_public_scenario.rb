@@ -60,6 +60,31 @@ def opsd_command(opsd, *arguments)
   [opsd, *arguments]
 end
 
+def assert_rendered_components!(manifest_path, rendered)
+  manifest = YAML.load_file(manifest_path)
+  spec = manifest.fetch("spec", {})
+  required_modules = %w[vpc kubernetes project]
+
+  Array(spec["caches"]).each do |cache|
+    required_modules << cache.fetch("engine") if cache.is_a?(Hash)
+  end
+
+  Array(spec["databases"]).each do |database|
+    required_modules << database.fetch("engine") if database.is_a?(Hash)
+  end
+
+  module_source = rendered.join("main.tf").read
+  required_modules.uniq.each do |module_name|
+    next if module_source.match?(/module\s+"#{Regexp.escape(module_name)}"\s*\{/)
+
+    abort "Rendered configuration is missing module [#{module_name}] for #{manifest_path}"
+  end
+
+  if Array(spec["caches"]).empty? && module_source.match?(/module\s+"redis"\s*\{/)
+    abort "Rendered configuration still contains Redis after it was removed"
+  end
+end
+
 run_with_input!(child_env, opsd_command(opsd, "config", "profile", "create", "ci"), "digitalocean\n\nfra1\n")
 run!(child_env, opsd_command(opsd, "config", "profile", "use", "ci"))
 run!(child_env, opsd_command(opsd, "init", "blueprint", scenario.fetch("blueprint"), manifest_path.to_s, "--variant", scenario.fetch("variant")))
@@ -90,6 +115,7 @@ stages.each_with_index do |stage, index|
   rendered = run_root.join("rendered-#{index}")
   run!(child_env, opsd_command(opsd, "validate", "manifest", manifest_path.to_s))
   run!(child_env, opsd_command(opsd, "render", "manifest", manifest_path.to_s, "--output", rendered.to_s))
+  assert_rendered_components!(manifest_path, rendered)
   run!(child_env, [iac_tool, "init", "-backend=false", "-input=false"], chdir: rendered)
   # The rendered directory is a generated artifact. Normalize it first, then
   # keep the check below as a guard against non-deterministic formatting.
