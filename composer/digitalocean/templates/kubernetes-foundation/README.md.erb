@@ -1,0 +1,38 @@
+# kubernetes-foundation
+
+Scenario `kubernetes-foundation` provisions the DigitalOcean core layer:
+- DigitalOcean Kubernetes cluster with a default node pool
+- optional dedicated VPC
+- DigitalOcean project with cluster URN attached
+
+Additional platform layers are reserved for ArgoCD, observability, tools, and
+applications and are not installed by this foundation stack yet.
+
+## Required variables
+
+- `digitalocean_token` (required)
+
+## VPC modes
+
+1. `create_vpc = true`:
+- creates dedicated VPC for the cluster
+- recommended default for isolation
+
+2. `create_vpc = false`:
+- uses existing VPC from `vpc_uuid`
+
+## How to run locally
+
+```bash
+cp tofu.tfvars.example tofu.tfvars
+export TF_VAR_digitalocean_token="dop_v1_xxx"
+tofu init
+tofu plan -var-file=tofu.tfvars
+tofu apply -var-file=tofu.tfvars
+```
+
+Cleanup:
+
+```bash
+tofu destroy -var-file=tofu.tfvars
+```

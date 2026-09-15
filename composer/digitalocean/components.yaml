@@ -1,0 +1,201 @@
+version: v1alpha1
+
+components:
+  vpc:
+    title: VPC
+    kind: network
+    module: ../../modules/digitalocean/modules/vpc
+    depends_on: []
+    provides:
+      - vpc.id
+      - vpc.urn
+
+  droplet-single:
+    title: Single Droplet
+    kind: compute
+    module: ../../modules/digitalocean/modules/droplet
+    depends_on:
+      - vpc
+    provides:
+      - droplet.id
+      - droplet.urn
+      - droplet.ipv4_address
+
+  droplet-pool:
+    title: Droplet Pool
+    kind: compute
+    module: ../../modules/digitalocean/modules/droplet
+    depends_on:
+      - vpc
+    provides:
+      - droplet_pool.ids
+      - droplet_pool.urns
+
+  reserved-ip:
+    title: Reserved IP
+    kind: network-edge
+    module: ../../modules/digitalocean/modules/reserved-ip
+    depends_on:
+      - droplet-single
+    provides:
+      - reserved_ip.ip_address
+      - reserved_ip.urn
+
+  load-balancer:
+    title: Load Balancer
+    kind: network-edge
+    module: ../../modules/digitalocean/modules/load-balancer
+    depends_on:
+      - droplet-pool
+      - vpc
+    provides:
+      - load_balancer.id
+      - load_balancer.ip
+      - load_balancer.urn
+
+  managed-postgres:
+    title: Managed PostgreSQL
+    kind: database
+    module: ../../modules/digitalocean/modules/managed-postgres
+    depends_on:
+      - vpc
+    provides:
+      - postgres.cluster_id
+      - postgres.cluster_urn
+      - postgres.host
+      - postgres.port
+
+  managed-mysql:
+    title: Managed MySQL
+    kind: database
+    module: ../../modules/digitalocean/modules/managed-mysql
+    depends_on:
+      - vpc
+    provides:
+      - mysql.cluster_id
+      - mysql.cluster_urn
+      - mysql.host
+      - mysql.port
+
+  managed-redis:
+    title: Managed Redis
+    kind: cache
+    module: ../../modules/digitalocean/modules/managed-redis
+    depends_on:
+      - vpc
+    provides:
+      - redis.cluster_id
+      - redis.cluster_urn
+      - redis.host
+      - redis.port
+
+  firewall:
+    title: Cloud Firewall
+    kind: security
+    module: ../../modules/digitalocean/modules/firewall
+    depends_on: []
+    provides:
+      - firewall.id
+
+  dns-zone:
+    title: DNS Zone
+    kind: dns
+    module: ../../modules/digitalocean/modules/dns-zone
+    depends_on: []
+    provides:
+      - dns_zone.name
+      - dns_zone.urn
+
+  dns-record:
+    title: DNS Record
+    kind: dns
+    module: ../../modules/digitalocean/modules/dns-record
+    depends_on:
+      - dns-zone
+    provides:
+      - dns_record.fqdn
+
+  project:
+    title: Project
+    kind: organization
+    module: ../../modules/digitalocean/modules/project
+    depends_on: []
+    provides:
+      - project.id
+
+  kubernetes:
+    title: Kubernetes
+    kind: cluster
+    module: ../../modules/digitalocean/modules/kubernetes
+    depends_on:
+      - vpc
+    provides:
+      - kubernetes.id
+      - kubernetes.urn
+
+  container-registry:
+    title: Container Registry
+    kind: registry
+    module: ../../modules/digitalocean/modules/container-registry
+    depends_on: []
+    provides:
+      - registry.id
+      - registry.urn
+
+  spaces-with-cdn:
+    title: Spaces with CDN
+    kind: object-storage
+    module: ../../modules/digitalocean/modules/spaces-with-cdn
+    depends_on: []
+    provides:
+      - spaces.bucket_urn
+      - spaces.bucket_name
+      - spaces.bucket_domain_name
+      - spaces.bucket_endpoint
+      - spaces.cdn_endpoint
+
+composition_rules:
+  dns-record:
+    target_from:
+      droplet-single: droplet.ipv4_address
+      reserved-ip: reserved_ip.ip_address
+      load-balancer: load_balancer.ip
+      spaces-with-cdn: spaces.cdn_endpoint
+
+  firewall:
+    droplet_targets_from:
+      droplet-single: droplet.id
+      droplet-pool: droplet_pool.ids
+
+  managed-postgres:
+    firewall_allow_from:
+      droplet-single: droplet.id
+      droplet-pool: droplet_pool.ids
+      kubernetes: kubernetes.id
+
+  managed-mysql:
+    firewall_allow_from:
+      droplet-single: droplet.id
+      droplet-pool: droplet_pool.ids
+      kubernetes: kubernetes.id
+
+  managed-redis:
+    firewall_allow_from:
+      droplet-single: droplet.id
+      droplet-pool: droplet_pool.ids
+      kubernetes: kubernetes.id
+
+  project:
+    resource_urns_from:
+      vpc: vpc.urn
+      droplet-single: droplet.urn
+      droplet-pool: droplet_pool.urns
+      reserved-ip: reserved_ip.urn
+      load-balancer: load_balancer.urn
+      managed-postgres: postgres.cluster_urn
+      managed-mysql: mysql.cluster_urn
+      managed-redis: redis.cluster_urn
+      dns-zone: dns_zone.urn
+      kubernetes: kubernetes.urn
+      container-registry: registry.urn
+      spaces-with-cdn: spaces.bucket_urn

@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+APP_ROOT="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+if [ -x "${APP_ROOT}/runtime/bin/ruby" ]; then
+  RUBY_BIN="${APP_ROOT}/runtime/bin/ruby"
+else
+  RUBY_BIN="${RUBY_BIN:-ruby}"
+fi
+
+exec "${RUBY_BIN}" --disable-gems -I"${APP_ROOT}/lib" -ropsd/cli -e 'OPSd::CLI.run(ARGV)' -- "$@"

@@ -1,0 +1,68 @@
+terraform {
+  required_version = ">= 1.11.0"
+
+  required_providers {
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.78"
+    }
+  }
+}
+
+provider "digitalocean" {
+  token = var.digitalocean_token
+}
+
+module "vpc" {
+  count  = var.create_vpc ? 1 : 0
+  source = "<%= module_package_root %>//modules/vpc"
+
+  name        = var.vpc_name
+  region      = var.region
+  description = var.vpc_description
+  ip_range    = var.vpc_ip_range
+}
+
+locals {
+  vpc_uuid_effective = var.create_vpc ? module.vpc[0].id : var.vpc_uuid
+  project_resource_urns = var.create_vpc ? [
+    module.kubernetes.urn,
+    module.vpc[0].urn
+    ] : [
+    module.kubernetes.urn
+  ]
+}
+
+module "kubernetes" {
+  source = "<%= module_package_root %>//modules/kubernetes"
+
+  name                   = var.cluster_name
+  region                 = var.region
+  kubernetes_version     = var.kubernetes_version
+  vpc_uuid               = local.vpc_uuid_effective
+  tags                   = var.cluster_tags
+  auto_upgrade           = var.auto_upgrade
+  surge_upgrade          = var.surge_upgrade
+  ha                     = var.ha
+  node_pool_name         = var.node_pool_name
+  node_size              = var.node_size
+  node_count             = var.node_count
+  node_auto_scale        = var.node_auto_scale
+  node_min_nodes         = var.node_min_nodes
+  node_max_nodes         = var.node_max_nodes
+  node_tags              = var.node_tags
+  node_labels            = var.node_labels
+  maintenance_day        = var.maintenance_day
+  maintenance_start_time = var.maintenance_start_time
+  maintenance_duration   = var.maintenance_duration
+}
+
+module "project" {
+  source = "<%= module_package_root %>//modules/project"
+
+  name          = var.project_name
+  description   = var.project_description
+  purpose       = var.project_purpose
+  environment   = var.project_environment
+  resource_urns = local.project_resource_urns
+}

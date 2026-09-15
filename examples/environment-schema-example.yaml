@@ -1,0 +1,83 @@
+---
+# Schema-shaped v2 example intended as a commented starter/reference.
+apiVersion: opsd.io/v2alpha1
+kind: Environment
+
+metadata:
+  # Stable environment identifier used as the naming base during render.
+  name: <environment-name>
+  # Deployment stage.
+  environment: <development|staging|production>
+  # Provider region.
+  region: <provider-region>
+  # Flat grouping tags.
+  tags:
+    - <tag>
+  # Structured labels for automation and ownership metadata.
+  labels:
+    <label-key>: <label-value>
+
+spec:
+  # Source-of-truth provider for this environment.
+  provider: <provider>
+  origin:
+    # Blueprint used to initialize this manifest.
+    blueprint: <blueprint-id>
+    # Variant selected during blueprint init.
+    variant: <variant-id>
+    # Runtime family recorded at init time.
+    family: <droplet|kubernetes|spaces>
+    # Composer stack selected by the blueprint variant.
+    stack: <composer-stack-id>
+    modules:
+      # Pinned module release metadata resolved during init/render.
+      repo: <modules-repository-url>
+      version: <release-or-tag>
+      commit: <resolved-commit-sha>
+  defaults:
+    # Shared defaults reused by renderers and follow-up edits.
+    project: <project-name>
+    network: <network-name>
+    dns_zone: <optional-dns-zone>
+  compute_groups:
+    - id: <group-id>
+      # Supported values: vm, service, static-site, cluster
+      type: <vm|service|static-site|cluster>
+      role: <role>
+      # Replica count for horizontally scaled primary workloads.
+      replicas: <count>
+      profile: <profile>
+      # VM image when the compute type uses machine-based runtime.
+      image: <optional-image>
+      # In-process application port for service-like workloads.
+      port: <optional-port>
+      # Optional load balancer ids.
+      attach_to: []
+      # Resource ids referenced by this workload, for example databases or caches.
+      links: []
+      # Family/runtime-specific network settings.
+      network: {}
+      # Public exposure and DNS settings.
+      exposure: {}
+      # Delivery/bootstrap strategy and source definition.
+      delivery: {}
+      # Per-resource tags and labels.
+      metadata:
+        tags: []
+        labels: {}
+  # Singleton or special-purpose machines outside autoscaled groups.
+  nodes: []
+  # Managed relational databases.
+  databases: []
+  # Managed caches such as Redis.
+  caches: []
+  # Explicit load balancer resources.
+  load_balancers: []
+  # Object storage buckets or equivalent.
+  object_storage: []
+  # CDN endpoints attached to object storage origins.
+  cdn_endpoints: []
+  policies:
+    # Render/runtime management controls.
+    drift_detection: strict
+    managed_output: true

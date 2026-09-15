@@ -1,0 +1,8 @@
+.git
+.gitlab
+.DS_Store
+.idea
+.vscode
+tmp
+tmp-*.environment.yaml
+*.log
