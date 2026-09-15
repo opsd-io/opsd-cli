@@ -10,6 +10,8 @@ require "tempfile"
 require "tmpdir"
 require "yaml"
 
+require_relative "../../ci/public_scenario_matrix"
+
 ROOT = Pathname(__dir__).join("../..").realpath
 scenario_id = ENV.fetch("OPSD_PUBLIC_SCENARIO")
 modules_ref = ENV.fetch("OPSD_PUBLIC_MODULES_REF")
@@ -20,7 +22,7 @@ compatibility_file = ROOT.join(compatibility_file) unless compatibility_file.abs
 abort "Unsupported IaC tool: #{iac_tool}" unless %w[terraform tofu].include?(iac_tool)
 
 config = YAML.load_file(compatibility_file)
-scenario = config.fetch("scenarios").find { |entry| entry.fetch("id") == scenario_id }
+scenario = OPSd::PublicScenarioMatrix.expand(config).find { |entry| entry.fetch("id") == scenario_id }
 abort "Unknown public scenario: #{scenario_id}" if scenario.nil?
 
 run_root = Pathname(Dir.mktmpdir("opsd-public-#{scenario_id}-"))

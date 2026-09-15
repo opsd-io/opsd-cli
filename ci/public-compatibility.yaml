@@ -16,16 +16,14 @@ modules:
     refs:
       - v1.0.0
 
-scenarios:
-  - id: kubernetes-foundation
+scenario_generation:
+  base:
     blueprint: kubernetes-foundation
     variant: kubernetes
-    operations: []
-
-  - id: kubernetes-foundation-add-remove-redis
-    blueprint: kubernetes-foundation
-    variant: kubernetes
-    operations:
-      - command: [add, cache, redis]
-      - command: [remove, cache]
-        args: [cache-main]
+  capabilities:
+    databases:
+      engines: [postgres, mysql]
+      max_count: 2
+    caches:
+      engines: [redis]
+      max_count: 1
