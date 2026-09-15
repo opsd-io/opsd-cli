@@ -1,0 +1,31 @@
+version: 1
+provider: digitalocean
+
+# Keep this file public: it describes only compatibility combinations and
+# synthetic plan scenarios. Credentials and real infrastructure belong in the
+# private integration workflow.
+cli_refs:
+  - current
+
+iac_tools:
+  - terraform
+  - tofu
+
+modules:
+  digitalocean:
+    refs:
+      - v1.0.0
+
+scenarios:
+  - id: kubernetes-foundation
+    blueprint: kubernetes-foundation
+    variant: kubernetes
+    operations: []
+
+  - id: kubernetes-foundation-add-remove-redis
+    blueprint: kubernetes-foundation
+    variant: kubernetes
+    operations:
+      - command: [add, cache, redis]
+      - command: [remove, cache]
+        args: [cache-main]
