@@ -25,12 +25,16 @@ module "vpc" {
 
 locals {
   vpc_uuid_effective = var.create_vpc ? module.vpc[0].id : var.vpc_uuid
-  project_resource_urns = var.create_vpc ? [
-    module.kubernetes.urn,
-    module.vpc[0].urn
+  project_resource_urns = concat(
+    var.create_vpc ? [
+      module.kubernetes.urn,
+      module.vpc[0].urn
     ] : [
-    module.kubernetes.urn
-  ]
+      module.kubernetes.urn
+    ],
+<% if manifest.primary_cache %>    [module.redis.urn]
+<% else %>    []
+<% end %>  )
 }
 
 module "kubernetes" {
@@ -56,6 +60,20 @@ module "kubernetes" {
   maintenance_start_time = var.maintenance_start_time
   maintenance_duration   = var.maintenance_duration
 }
+
+<% if manifest.primary_cache %>
+module "redis" {
+  source = "<%= module_package_root %>//modules/managed-redis"
+
+  name                 = "<%= manifest.metadata_name %>-redis"
+  redis_version        = "<%= manifest.primary_cache.fetch("version", "7") %>"
+  region               = var.region
+  size                 = "<%= profile_value(manifest.primary_cache.fetch("profile", "db-s-1vcpu-1gb")) %>"
+  node_count           = <%= manifest.primary_cache_config.fetch("node_count", 1) %>
+  private_network_uuid = local.vpc_uuid_effective
+  tags                 = var.cluster_tags
+}
+<% end %>
 
 module "project" {
   source = "<%= module_package_root %>//modules/project"
