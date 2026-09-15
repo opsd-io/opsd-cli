@@ -1,0 +1,13 @@
+name: Release bundle
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    uses: opsd-io/public-workflows/.github/workflows/cli-release-bundle.yml@main
