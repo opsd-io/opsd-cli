@@ -14,6 +14,14 @@
 
 - None yet.
 
+## [1.0.1](https://github.com/opsd-io/opsd-cli/compare/v1.0.0...v1.0.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* make foundation tests self-contained ([#8](https://github.com/opsd-io/opsd-cli/issues/8)) ([1bab4ee](https://github.com/opsd-io/opsd-cli/commit/1bab4eeff9cf1a38b3f6a240b83a9733cc07aa55))
+* publish cli release assets ([#6](https://github.com/opsd-io/opsd-cli/issues/6)) ([d4c549b](https://github.com/opsd-io/opsd-cli/commit/d4c549b2257d051220bb5b0c0f08327d63f0a123))
+
 ## 1.0.0 (2026-09-15)
 
 
