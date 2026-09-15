@@ -95,4 +95,72 @@ class KubernetesFoundationTest < Minitest::Test
       assert_includes main_tf, "module.redis.urn"
     end
   end
+
+  def test_kubernetes_foundation_renders_optional_postgres_databases
+    manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+    manifest_data.fetch("spec").fetch("databases") << {
+      "id" => "db-main",
+      "engine" => "postgres",
+      "profile" => "db-s-1vcpu-1gb",
+      "config" => { "database_name" => "app", "app_user_name" => "app" }
+    }
+    manifest = OPSd::Manifest.new(manifest_data)
+
+    Dir.mktmpdir("opsd-foundation-postgres-render") do |output_dir|
+      output_path = File.join(output_dir, "generated")
+      OPSd::Renderer.new(
+        app_root: File.expand_path("..", __dir__),
+        workspace_root: output_dir
+      ).render(
+        manifest,
+        output_path,
+        module_source: {
+          repo: "https://github.com/opsd-io/modules-digitalocean.git",
+          version: "v1.0.0",
+          commit: "abcdef1234567890"
+        }
+      )
+
+      main_tf = File.read(File.join(output_path, "main.tf"))
+      assert_includes main_tf, 'module "postgres"'
+      assert_includes main_tf, "modules-digitalocean.git//modules/managed-postgres?ref=v1.0.0"
+      assert_includes main_tf, "module.postgres.urn"
+      assert_includes main_tf, 'postgres_version     = "16"'
+    end
+  end
+
+  def test_kubernetes_foundation_renders_multiple_postgres_databases
+    manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+    databases = manifest_data.fetch("spec").fetch("databases")
+    2.times do |index|
+      databases << {
+        "id" => "db-#{index + 1}",
+        "engine" => "postgres",
+        "profile" => "db-s-1vcpu-1gb"
+      }
+    end
+    manifest = OPSd::Manifest.new(manifest_data)
+
+    Dir.mktmpdir("opsd-foundation-postgres-multi-render") do |output_dir|
+      output_path = File.join(output_dir, "generated")
+      OPSd::Renderer.new(
+        app_root: File.expand_path("..", __dir__),
+        workspace_root: output_dir
+      ).render(
+        manifest,
+        output_path,
+        module_source: {
+          repo: "https://github.com/opsd-io/modules-digitalocean.git",
+          version: "v1.0.0",
+          commit: "abcdef1234567890"
+        }
+      )
+
+      main_tf = File.read(File.join(output_path, "main.tf"))
+      assert_includes main_tf, 'module "postgres"'
+      assert_includes main_tf, 'module "postgres_2"'
+      assert_includes main_tf, "module.postgres.urn"
+      assert_includes main_tf, "module.postgres_2.urn"
+    end
+  end
 end
