@@ -2,6 +2,9 @@
 
 Thanks for helping improve OPSd CLI.
 
+The shared organization rules are maintained in the
+[central OPSd contribution guide](https://github.com/opsd-io/.github/blob/main/CONTRIBUTING.md).
+
 ## Before You Start
 
 Read these first:
