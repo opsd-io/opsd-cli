@@ -18,3 +18,5 @@ jobs:
     uses: opsd-io/public-workflows/.github/workflows/opsd-public-plan.yml@main
     with:
       compatibility-file: ci/public-compatibility.yaml
+      integration-tests-repository: opsd-io/integration-tests
+      integration-tests-ref: main
