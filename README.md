@@ -26,3 +26,7 @@ opsd render manifest environment.yaml --output ./generated
 [installation guide](./docs/getting-started/install.md),
 [quickstart](./docs/getting-started/quickstart.md), and
 [manifest reference](./docs/manifest.md) for details.
+
+See the [central OPSd contribution guide](https://github.com/opsd-io/.github/blob/main/CONTRIBUTING.md)
+for the required pull request and commit format, local checks, and
+release/testing workflow.
