@@ -17,4 +17,5 @@ jobs:
       version-file: lib/opsd/version.rb
       component: opsd
       release-as: 1.0.1
+      last-release-sha: 6fad72cd54f123c16fc540e95704a13ab5f868b6
       publish-bundle: true
