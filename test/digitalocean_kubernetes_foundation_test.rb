@@ -59,6 +59,7 @@ class KubernetesFoundationTest < Minitest::Test
       main_tf = File.read(File.join(output_path, "main.tf"))
       assert_includes main_tf, "modules-digitalocean.git//modules/kubernetes?ref=v1.0.0"
       assert_includes main_tf, "modules-digitalocean.git//modules/vpc?ref=v1.0.0"
+      refute_includes main_tf, "module.vpc[0].urn"
       assert File.file?(File.join(output_path, "opsd.layers.yaml"))
       assert File.file?(File.join(output_path, "layers", "bootstrap", "README.md"))
     end
