@@ -1,0 +1,34 @@
+name: Private infrastructure integration tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      cli-ref:
+        description: CLI tag or commit to test.
+        required: true
+        default: v1.0.0
+        type: string
+      modules-ref:
+        description: DigitalOcean modules tag or commit to test.
+        required: true
+        default: v1.0.0
+        type: string
+      integration-tests-ref:
+        description: Integration test suite tag or commit to test.
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    uses: opsd-io/private-workflows/.github/workflows/opsd-private-integration.yml@main
+    with:
+      cli-ref: ${{ inputs.cli-ref }}
+      modules-ref: ${{ inputs.modules-ref }}
+      integration-tests-repository: opsd-io/integration-tests
+      integration-tests-ref: ${{ inputs.integration-tests-ref }}
+    secrets:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
