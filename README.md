@@ -30,3 +30,8 @@ opsd render manifest environment.yaml --output ./generated
 See the [central OPSd contribution guide](https://github.com/opsd-io/.github/blob/main/CONTRIBUTING.md)
 for the required pull request and commit format, local checks, and
 release/testing workflow.
+
+After a GitHub Release is published, the private integration workflow can
+automatically test that CLI tag against every DigitalOcean module ref listed
+in the integration-tests compatibility matrix. Manual runs can still pin a
+specific module ref.
