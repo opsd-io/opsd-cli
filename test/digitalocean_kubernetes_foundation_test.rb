@@ -93,6 +93,7 @@ class KubernetesFoundationTest < Minitest::Test
       assert_includes main_tf, 'module "valkey"'
       assert_includes main_tf, "modules-digitalocean.git//modules/managed-valkey?ref=v1.0.0"
       assert_includes main_tf, "project_resource_urns = concat"
+      assert_includes main_tf, 'module "project_resources"'
       assert_includes main_tf, "module.valkey.urn"
     end
   end

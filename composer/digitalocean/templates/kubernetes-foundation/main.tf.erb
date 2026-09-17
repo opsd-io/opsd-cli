@@ -117,9 +117,16 @@ module "valkey" {
 module "project" {
   source = "<%= module_package_root %>//modules/project"
 
-  name          = var.project_name
-  description   = var.project_description
-  purpose       = var.project_purpose
-  environment   = var.project_environment
-  resource_urns = local.project_resource_urns
+  name        = var.project_name
+  description = var.project_description
+  purpose     = var.project_purpose
+  environment = var.project_environment
+}
+
+module "project_resources" {
+  source = "<%= module_package_root %>//modules/project-resources"
+
+  project_id        = module.project.id
+  resource_urns     = local.project_resource_urns
+  digitalocean_token = var.digitalocean_token
 }
