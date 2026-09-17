@@ -91,8 +91,8 @@ def assert_rendered_components!(manifest_path, rendered)
     abort "Rendered configuration is missing module [#{module_name}] for #{manifest_path}"
   end
 
-  if Array(spec["caches"]).empty? && module_source.match?(/module\s+"redis"\s*\{/)
-    abort "Rendered configuration still contains Redis after it was removed"
+  if Array(spec["caches"]).empty? && module_source.match?(/module\s+"valkey"\s*\{/)
+    abort "Rendered configuration still contains Valkey after it was removed"
   end
 end
 

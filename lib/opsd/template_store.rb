@@ -360,7 +360,7 @@ module OPSd
     def build_cache(values)
       {
         "id" => "cache-main",
-        "engine" => "redis",
+        "engine" => "valkey",
         "profile" => values.fetch("cache_profile", "db-s-1vcpu-1gb")
       }
     end

@@ -18,7 +18,7 @@ provider "digitalocean" {
 <% mysql_databases = manifest.databases.select { |database| database.fetch("engine") == "mysql" } %>
 <% mysql_module_names = mysql_databases.each_index.map { |index| index.zero? ? "mysql" : "mysql_#{index + 1}" } %>
 <% project_optional_urns = [] %>
-<% project_optional_urns << "module.redis.urn" if manifest.primary_cache %>
+<% project_optional_urns << "module.valkey.urn" if manifest.primary_cache %>
 <% project_optional_urns.concat(postgres_module_names.map { |name| "module.#{name}.urn" }) %>
 <% project_optional_urns.concat(mysql_module_names.map { |name| "module.#{name}.urn" }) %>
 
@@ -101,11 +101,11 @@ module "kubernetes" {
 }
 
 <% if manifest.primary_cache %>
-module "redis" {
-  source = "<%= module_package_root %>//modules/managed-redis"
+module "valkey" {
+  source = "<%= module_package_root %>//modules/managed-valkey"
 
-  name                 = "<%= manifest.metadata_name %>-redis"
-  redis_version        = "<%= manifest.primary_cache.fetch("version", "7") %>"
+  name                 = "<%= manifest.metadata_name %>-valkey"
+  valkey_version       = "<%= manifest.primary_cache.fetch("version", "7") %>"
   region               = var.region
   size                 = "<%= profile_value(manifest.primary_cache.fetch("profile", "db-s-1vcpu-1gb")) %>"
   node_count           = <%= manifest.primary_cache_config.fetch("node_count", 1) %>

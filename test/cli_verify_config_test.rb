@@ -97,7 +97,7 @@ class CliVerifyConfigTest < Minitest::Test
           postgres:
             - db-s-1vcpu-1gb
         caches:
-          redis:
+          valkey:
             - db-s-1vcpu-1gb
         object_storage:
           spaces:
@@ -106,7 +106,7 @@ class CliVerifyConfigTest < Minitest::Test
         databases:
           - postgres
         caches:
-          - redis
+          - valkey
         object_storage:
           - spaces
         cdn_endpoints:

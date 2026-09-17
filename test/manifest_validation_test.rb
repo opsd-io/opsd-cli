@@ -629,7 +629,7 @@ class ManifestValidationTest < Minitest::Test
         "caches" => [
           {
             "id" => "cache-main",
-            "engine" => "redis",
+            "engine" => "valkey",
             "profile" => "db-s-1vcpu-1gb"
           }
         ],
@@ -676,7 +676,7 @@ class ManifestValidationTest < Minitest::Test
         "mysql" => %w[db-s-1vcpu-1gb db-s-2vcpu-4gb]
       },
       "caches" => {
-        "redis" => %w[db-s-1vcpu-1gb db-s-2vcpu-4gb]
+        "valkey" => %w[db-s-1vcpu-1gb db-s-2vcpu-4gb]
       },
       "object_storage" => {
         "spaces" => %w[standard]

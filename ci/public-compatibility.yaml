@@ -14,7 +14,7 @@ iac_tools:
 modules:
   digitalocean:
     refs:
-      - v1.0.0
+      - main
 
 scenario_generation:
   base:
@@ -25,5 +25,5 @@ scenario_generation:
       engines: [postgres, mysql]
       max_count: 2
     caches:
-      engines: [redis]
+      engines: [valkey]
       max_count: 1

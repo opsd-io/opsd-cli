@@ -457,10 +457,10 @@ databases:
 ```yaml
 caches:
   - id: cache-main
-    engine: redis
+    engine: valkey
     profile: db-s-1vcpu-1gb
     config:
-      # Optional Redis-specific settings.
+      # Optional Valkey-specific settings.
       node_count: 2
       eviction_policy: allkeys-lru
 ```
@@ -807,7 +807,7 @@ spec:
 
   caches:
     - id: cache-main
-      engine: redis
+      engine: valkey
       profile: db-s-1vcpu-1gb
 
   load_balancers:

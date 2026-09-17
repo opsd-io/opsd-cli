@@ -65,16 +65,16 @@ class KubernetesFoundationTest < Minitest::Test
     end
   end
 
-  def test_kubernetes_foundation_renders_optional_redis
+  def test_kubernetes_foundation_renders_optional_valkey
     manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
     manifest_data.fetch("spec").fetch("caches") << {
       "id" => "cache-main",
-      "engine" => "redis",
+      "engine" => "valkey",
       "profile" => "db-s-1vcpu-1gb"
     }
     manifest = OPSd::Manifest.new(manifest_data)
 
-    Dir.mktmpdir("opsd-foundation-redis-render") do |output_dir|
+    Dir.mktmpdir("opsd-foundation-valkey-render") do |output_dir|
       output_path = File.join(output_dir, "generated")
       OPSd::Renderer.new(
         app_root: File.expand_path("..", __dir__),
@@ -90,10 +90,10 @@ class KubernetesFoundationTest < Minitest::Test
       )
 
       main_tf = File.read(File.join(output_path, "main.tf"))
-      assert_includes main_tf, 'module "redis"'
-      assert_includes main_tf, "modules-digitalocean.git//modules/managed-redis?ref=v1.0.0"
+      assert_includes main_tf, 'module "valkey"'
+      assert_includes main_tf, "modules-digitalocean.git//modules/managed-valkey?ref=v1.0.0"
       assert_includes main_tf, "project_resource_urns = concat"
-      assert_includes main_tf, "module.redis.urn"
+      assert_includes main_tf, "module.valkey.urn"
     end
   end
 

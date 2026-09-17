@@ -44,7 +44,7 @@ module OPSd
       attach_detach: %w[compute-group],
       remove: %w[compute-group database cache object-storage load-balancer cdn-endpoint node],
       add_database: %w[postgres mysql],
-      add_cache: %w[redis],
+      add_cache: %w[valkey],
       add_node: %w[vm]
     }.freeze
     COMPLETION_OPTIONS = {

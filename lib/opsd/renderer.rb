@@ -280,7 +280,7 @@ module OPSd
       lines.compact.join("\n") + "\n"
     end
 
-    def render_droplet_single_with_database_and_redis(manifest)
+    def render_droplet_single_with_database_and_valkey(manifest)
       database = manifest.primary_database || {}
       database_config = manifest.primary_database_config
       cache = manifest.primary_cache || {}
@@ -300,7 +300,7 @@ module OPSd
       lines << %(user_data          = #{hcl_scalar(cloud_init_user_data(bootstrap))})
       lines << %(extra_nodes         = #{hcl_list_of_objects(extra_nodes_payload(manifest))})
       lines << ""
-      lines << %(tags = #{hcl_list(default_tags(manifest, "droplet-managed-postgres-redis-do-dns"))})
+      lines << %(tags = #{hcl_list(default_tags(manifest, "droplet-managed-postgres-valkey-do-dns"))})
       lines << ""
       lines << %(cloudinit_ssh_authorized_keys = #{hcl_list(cloudinit_authorized_keys(bootstrap))})
       lines << %(cloudinit_user                = "#{bootstrap["cloud_init_user"]}")
@@ -318,11 +318,11 @@ module OPSd
       lines << %(db_database_name  = #{hcl_scalar(database_config.fetch("database_name", "app"))})
       lines << %(db_app_user_name  = #{hcl_scalar(database_config.fetch("app_user_name", "app"))})
       lines << ""
-      lines << %(redis_name_prefix = "#{manifest.metadata_name}")
-      lines << %(redis_version     = "7")
-      lines << %(redis_size        = "#{profile_value(cache.fetch("profile", "db-s-1vcpu-1gb"))}")
-      lines << %(redis_node_count  = #{cache_config.fetch("node_count", 1)})
-      lines << %(redis_eviction_policy = #{hcl_scalar(cache_config["eviction_policy"])})
+      lines << %(valkey_name_prefix = "#{manifest.metadata_name}")
+      lines << %(valkey_version     = "7")
+      lines << %(valkey_size        = "#{profile_value(cache.fetch("profile", "db-s-1vcpu-1gb"))}")
+      lines << %(valkey_node_count  = #{cache_config.fetch("node_count", 1)})
+      lines << %(valkey_eviction_policy = #{hcl_scalar(cache_config["eviction_policy"])})
       lines << ""
       lines << %(firewall_public_ingress_ports = #{hcl_list(public_ingress_ports)})
       lines << %(enable_dns           = #{dns["enabled"] == true})
@@ -639,7 +639,7 @@ module OPSd
       case topology
       when "single"
         return "droplet-single-do-dns" unless database_enabled
-        return "droplet-managed-postgres-redis-do-dns" if database_enabled && engine == "postgres" && cache_enabled
+        return "droplet-managed-postgres-valkey-do-dns" if database_enabled && engine == "postgres" && cache_enabled
         return "droplet-managed-postgres-do-dns" if engine == "postgres"
         return "droplet-managed-mysql-vpc-firewall-do-dns" if engine == "mysql" && manifest.composer_stack == "droplet-managed-mysql-vpc-firewall"
         return "droplet-managed-mysql-do-dns" if engine == "mysql"

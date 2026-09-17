@@ -13,7 +13,7 @@ components:
     - bastion
     - managed-postgres
     - managed-mysql
-    - managed-redis
+    - managed-valkey
     - container-registry
     - spaces-with-cdn
 
