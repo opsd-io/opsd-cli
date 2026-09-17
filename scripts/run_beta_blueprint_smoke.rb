@@ -81,8 +81,8 @@ def apply_growth_mutation!(entry, env, opsd_bin, manifest_path)
     run!(env, [*opsd_bin, "add", "node", "vm", manifest_path.to_s, "--id", "bastion", "--role", "bastion", "--profile", target_profile])
   when "remove-cdn-endpoint"
     run!(env, [*opsd_bin, "remove", "cdn-endpoint", manifest_path.to_s, "cdn-public"])
-  when "add-cache-redis"
-    run!(env, [*opsd_bin, "add", "cache", "redis", manifest_path.to_s])
+  when "add-cache-valkey"
+    run!(env, [*opsd_bin, "add", "cache", "valkey", manifest_path.to_s])
   when "remove-cache"
     run!(env, [*opsd_bin, "remove", "cache", manifest_path.to_s, "cache-main"])
   when "resize-cache"

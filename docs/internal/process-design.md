@@ -160,8 +160,8 @@ This avoids combinatorial explosion such as:
 - droplet + dns
 - droplet + postgres
 - droplet + mysql
-- droplet + redis
-- droplet + lb + postgres + redis
+- droplet + valkey
+- droplet + lb + postgres + valkey
 
 Instead, the model expresses:
 

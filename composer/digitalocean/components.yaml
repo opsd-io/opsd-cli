@@ -77,17 +77,17 @@ components:
       - mysql.host
       - mysql.port
 
-  managed-redis:
-    title: Managed Redis
+  managed-valkey:
+    title: Managed Valkey
     kind: cache
-    module: ../../modules/digitalocean/modules/managed-redis
+    module: ../../modules/digitalocean/modules/managed-valkey
     depends_on:
       - vpc
     provides:
-      - redis.cluster_id
-      - redis.cluster_urn
-      - redis.host
-      - redis.port
+      - valkey.cluster_id
+      - valkey.cluster_urn
+      - valkey.host
+      - valkey.port
 
   firewall:
     title: Cloud Firewall
@@ -179,7 +179,7 @@ composition_rules:
       droplet-pool: droplet_pool.ids
       kubernetes: kubernetes.id
 
-  managed-redis:
+  managed-valkey:
     firewall_allow_from:
       droplet-single: droplet.id
       droplet-pool: droplet_pool.ids
@@ -194,7 +194,7 @@ composition_rules:
       load-balancer: load_balancer.urn
       managed-postgres: postgres.cluster_urn
       managed-mysql: mysql.cluster_urn
-      managed-redis: redis.cluster_urn
+      managed-valkey: valkey.cluster_urn
       dns-zone: dns_zone.urn
       kubernetes: kubernetes.urn
       container-registry: registry.urn
