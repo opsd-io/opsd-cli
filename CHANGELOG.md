@@ -14,6 +14,22 @@
 
 - None yet.
 
+## [2.0.0](https://github.com/opsd-io/opsd-cli/compare/v1.0.1...v2.0.0) (2026-09-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** use DigitalOcean cache names ([#42](https://github.com/opsd-io/opsd-cli/issues/42))
+
+### Features
+
+* **cli:** use DigitalOcean cache names ([#42](https://github.com/opsd-io/opsd-cli/issues/42)) ([b6a7465](https://github.com/opsd-io/opsd-cli/commit/b6a746518f297d681186e00e58a83b0a8d3ff367))
+
+
+### Bug Fixes
+
+* **ci:** remove temporary release overrides ([#39](https://github.com/opsd-io/opsd-cli/issues/39)) ([795bdd8](https://github.com/opsd-io/opsd-cli/commit/795bdd8785c70aa5e69d6aaa2c83c0d85a9896c1))
+
 ## [1.0.1](https://github.com/opsd-io/opsd-cli/compare/v1.1.0...v1.0.1) (2026-09-16)
 
 
