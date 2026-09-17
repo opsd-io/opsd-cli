@@ -14,6 +14,13 @@
 
 - None yet.
 
+## [2.1.0](https://github.com/opsd-io/opsd-cli/compare/v2.0.0...v2.1.0) (2026-09-17)
+
+
+### Features
+
+* **cli:** separate project resource assignments ([#43](https://github.com/opsd-io/opsd-cli/issues/43)) ([6abc78b](https://github.com/opsd-io/opsd-cli/commit/6abc78bd6570b358b0e574e77396e8619caaa97a))
+
 ## [2.0.0](https://github.com/opsd-io/opsd-cli/compare/v1.0.1...v2.0.0) (2026-09-17)
 
 
