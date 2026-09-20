@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   release-integration:
-    if: startsWith(github.head_ref, 'release-please--') || github.head_ref == 'chore/reset-release-baseline'
     uses: opsd-io/private-workflows/.github/workflows/opsd-private-integration.yml@main
     with:
       cli-ref: ${{ github.event.pull_request.head.sha }}
