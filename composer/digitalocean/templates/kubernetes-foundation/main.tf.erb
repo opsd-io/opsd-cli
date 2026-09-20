@@ -105,7 +105,7 @@ module "valkey" {
   source = "<%= module_package_root %>//modules/managed-valkey"
 
   name                 = "<%= manifest.metadata_name %>-valkey"
-  valkey_version       = "<%= manifest.primary_cache.fetch("version", "7") %>"
+  valkey_version       = "<%= manifest.primary_cache.fetch("version", "8") %>"
   region               = var.region
   size                 = "<%= profile_value(manifest.primary_cache.fetch("profile", "db-s-1vcpu-1gb")) %>"
   node_count           = <%= manifest.primary_cache_config.fetch("node_count", 1) %>
