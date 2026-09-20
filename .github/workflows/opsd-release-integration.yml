@@ -27,6 +27,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REQUEST_ID: ${{ github.repository }}-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          RELEASE_TITLE: ${{ github.event.pull_request.title }}
         run: |
           gh api --method POST \
             repos/opsd-io/private-workflows/actions/workflows/opsd-private-integration.yml/dispatches \
@@ -34,7 +35,7 @@ jobs:
             -f "inputs[request-id]=${REQUEST_ID}" \
             -f "inputs[caller-repository]=${GITHUB_REPOSITORY}" \
             -f "inputs[caller-pr-number]=${{ github.event.pull_request.number }}" \
-            -f "inputs[release-title]=${{ github.event.pull_request.title }}" \
+            -f "inputs[release-title]=${RELEASE_TITLE}" \
             -f "inputs[cli-repository]=${GITHUB_REPOSITORY}" \
             -f "inputs[cli-ref]=${{ github.event.pull_request.head.sha }}" \
             -f "inputs[modules-ref]=main" \
@@ -50,6 +51,7 @@ jobs:
           REQUEST_ID: ${{ steps.dispatch.outputs.request-id }}
         run: |
           for attempt in $(seq 1 360); do
+            echo "Waiting for private qualification (attempt ${attempt}/360)."
             run_id="$(gh api 'repos/opsd-io/private-workflows/actions/runs?event=workflow_dispatch&branch=main&per_page=50' \
               | jq -r --arg request "Release qualification ${REQUEST_ID}" \
                 '.workflow_runs[] | select(.display_title == $request) | .id' | head -n 1)"
