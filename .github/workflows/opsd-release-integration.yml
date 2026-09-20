@@ -1,0 +1,22 @@
+name: Release integration qualification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  release-integration:
+    if: startsWith(github.head_ref, 'release-please--')
+    uses: opsd-io/private-workflows/.github/workflows/opsd-private-integration.yml@main
+    with:
+      cli-ref: ${{ github.event.pull_request.head.sha }}
+      modules-ref: main
+      integration-tests-repository: opsd-io/integration-tests
+      integration-tests-ref: main
+      release-integration: true
+      release-component: cli
+    secrets:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
