@@ -18,5 +18,3 @@ jobs:
       integration-tests-ref: main
       release-integration: true
       release-component: cli
-    secrets:
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
