@@ -9,11 +9,60 @@ permissions:
 
 jobs:
   release-integration:
-    uses: opsd-io/private-workflows/.github/workflows/opsd-private-integration.yml@main
-    with:
-      cli-ref: ${{ github.event.pull_request.head.sha }}
-      modules-ref: main
-      integration-tests-repository: opsd-io/integration-tests
-      integration-tests-ref: main
-      release-integration: true
-      release-component: cli
+    name: qualified
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - name: Create release qualification token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.OPSD_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPSD_RELEASE_APP_PRIVATE_KEY }}
+          owner: opsd-io
+          repositories: private-workflows
+
+      - name: Dispatch private qualification
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REQUEST_ID: ${{ github.repository }}-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api --method POST \
+            repos/opsd-io/private-workflows/actions/workflows/opsd-private-integration.yml/dispatches \
+            -f ref=main \
+            -f "inputs[request-id]=${REQUEST_ID}" \
+            -f "inputs[caller-repository]=${GITHUB_REPOSITORY}" \
+            -f "inputs[caller-pr-number]=${{ github.event.pull_request.number }}" \
+            -f "inputs[release-title]=${{ github.event.pull_request.title }}" \
+            -f "inputs[cli-repository]=${GITHUB_REPOSITORY}" \
+            -f "inputs[cli-ref]=${{ github.event.pull_request.head.sha }}" \
+            -f "inputs[modules-ref]=main" \
+            -f "inputs[integration-tests-repository]=opsd-io/integration-tests" \
+            -f "inputs[integration-tests-ref]=main" \
+            -f "inputs[release-integration]=true" \
+            -f "inputs[release-component]=cli"
+          echo "request-id=${REQUEST_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for private qualification
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REQUEST_ID: ${{ steps.dispatch.outputs.request-id }}
+        run: |
+          for attempt in $(seq 1 360); do
+            run_id="$(gh api 'repos/opsd-io/private-workflows/actions/runs?event=workflow_dispatch&branch=main&per_page=50' \
+              | jq -r --arg request "Release qualification ${REQUEST_ID}" \
+                '.workflow_runs[] | select(.display_title == $request) | .id' | head -n 1)"
+            if [[ -n "${run_id}" ]]; then
+              status="$(gh api "repos/opsd-io/private-workflows/actions/runs/${run_id}" --jq '.status')"
+              conclusion="$(gh api "repos/opsd-io/private-workflows/actions/runs/${run_id}" --jq '.conclusion // empty')"
+              echo "private workflow ${run_id}: ${status} ${conclusion}"
+              if [[ "${status}" == "completed" ]]; then
+                [[ "${conclusion}" == "success" ]] || exit 1
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for private qualification ${REQUEST_ID}."
+          exit 1
