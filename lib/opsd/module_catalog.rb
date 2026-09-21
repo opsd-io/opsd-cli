@@ -184,7 +184,13 @@ module OPSd
       FileUtils.rm_rf(temp_root)
 
       begin
-        run_git!(["clone", "--branch", version, "--depth", "1", repo_url, temp_root.to_s])
+        if version.match?(/\A[0-9a-f]{40}\z/i)
+          run_git!(["clone", "--no-checkout", "--depth", "1", repo_url, temp_root.to_s])
+          run_git!(["-C", temp_root.to_s, "fetch", "--depth", "1", "origin", version])
+          run_git!(["-C", temp_root.to_s, "checkout", "--detach", "FETCH_HEAD"])
+        else
+          run_git!(["clone", "--branch", version, "--depth", "1", repo_url, temp_root.to_s])
+        end
         FileUtils.mv(temp_root, repo_root)
       ensure
         FileUtils.rm_rf(temp_root)
