@@ -26,7 +26,7 @@ jobs:
         id: dispatch
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          REQUEST_ID: ${{ github.repository }}-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}
+          REQUEST_ID: ${{ github.repository }}-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.event.pull_request.head.sha }}
           RELEASE_TITLE: ${{ github.event.pull_request.title }}
         run: |
           gh api --method POST \
