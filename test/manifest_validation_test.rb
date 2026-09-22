@@ -13,15 +13,15 @@ class ManifestValidationTest < Minitest::Test
   def test_v2_accepts_layer_plan
     data = base_v2_manifest
     data["spec"]["layers"] = {
-      "core" => { "enabled" => true },
-      "bootstrap" => { "argocd" => { "enabled" => true } },
-      "observability" => { "enabled" => false },
+      "bootstrap" => { "enabled" => true },
+      "infrastructure" => { "enabled" => true },
+      "monitoring" => { "enabled" => false },
       "tools" => { "enabled" => false },
-      "apps" => { "enabled" => false }
+      "applications" => { "enabled" => false }
     }
 
     OPSd::Manifest.new(data, profile_catalog: digitalocean_profile_catalog).validate!
-    assert_equal true, OPSd::Manifest.new(data).layers.dig("core", "enabled")
+    assert_equal true, OPSd::Manifest.new(data).layers.dig("infrastructure", "enabled")
   end
 
   def test_v2_rejects_unknown_kubernetes_layer
@@ -31,6 +31,24 @@ class ManifestValidationTest < Minitest::Test
     error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data, profile_catalog: digitalocean_profile_catalog).validate! }
 
     assert_includes error.errors, "spec.layers.unknown is not supported"
+  end
+
+  def test_v2_rejects_layer_without_enabled_flag
+    data = base_v2_manifest
+    data["spec"]["layers"] = { "bootstrap" => {} }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data, profile_catalog: digitalocean_profile_catalog).validate! }
+
+    assert_includes error.errors, "spec.layers.bootstrap.enabled is required"
+  end
+
+  def test_v2_rejects_non_boolean_layer_enabled_flag
+    data = base_v2_manifest
+    data["spec"]["layers"] = { "bootstrap" => { "enabled" => "yes" } }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data, profile_catalog: digitalocean_profile_catalog).validate! }
+
+    assert_includes error.errors, "spec.layers.bootstrap.enabled must be a boolean"
   end
 
   def test_manifest_requires_supported_api_version

@@ -106,31 +106,27 @@ module OPSd
     end
 
     def generate_layer_plan(output_path, manifest)
-      layers = manifest.layers
+      layers = manifest.kubernetes_layer_plan
       layer_root = output_path.join("layers")
       layer_root.mkpath
 
       plan = {
         "apiVersion" => "opsd.io/layers/v1alpha1",
+        "kind" => "LayerPlan",
         "status" => "planned",
         "layers" => layers
       }
       output_path.join("opsd.layers.yaml").write(YAML.dump(plan))
 
-      {
-        "bootstrap" => "Initial cluster services such as ArgoCD.",
-        "observability" => "Monitoring, metrics, logs, and Grafana.",
-        "tools" => "Ingress, certificates, DNS integration, and registries.",
-        "apps" => "Application namespaces and workloads."
-      }.each do |layer, description|
-        layer_path = layer_root.join(layer)
+      layers.each do |layer|
+        layer_path = layer_root.join(layer.fetch("directory"))
         layer_path.mkpath
         layer_path.join("README.md").write(<<~README)
-          # #{layer}
+          # #{layer.fetch("name")}
 
-          Placeholder for the OPSd #{layer} layer.
+          #{layer.fetch("description")}
 
-          #{description}
+          Status: #{layer.fetch("enabled") ? "enabled" : "disabled"}.
 
           This layer is planned in `opsd.layers.yaml` but is not generated yet.
         README

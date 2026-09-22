@@ -7,6 +7,26 @@ require "opsd/contract_store"
 require "opsd/template_store"
 
 class TemplateStoreTest < Minitest::Test
+  def test_kubernetes_template_uses_ordered_layer_contract
+    Dir.mktmpdir("opsd-template-store") do |workspace|
+      FileUtils.mkdir_p(File.join(workspace, "modules", "digitalocean", "blueprints"))
+      store = OPSd::TemplateStore.new(app_root: File.expand_path("..", __dir__), workspace_root: workspace)
+
+      manifest = YAML.safe_load(store.render_family_template("kubernetes"))
+
+      assert_equal(
+        {
+          "bootstrap" => { "enabled" => true },
+          "infrastructure" => { "enabled" => true },
+          "monitoring" => { "enabled" => false },
+          "tools" => { "enabled" => false },
+          "applications" => { "enabled" => false }
+        },
+        manifest.fetch("spec").fetch("layers")
+      )
+    end
+  end
+
   def test_provider_supported_includes_cached_release_blueprint_roots
     Dir.mktmpdir("opsd-template-store") do |workspace|
       cached_blueprint_root = File.join(workspace, ".opsd", "cache", "releases", "digitalocean", "main", "modules", "digitalocean", "blueprints")

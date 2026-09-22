@@ -37,7 +37,7 @@ class KubernetesFoundationTest < Minitest::Test
     end
   end
 
-  def test_kubernetes_foundation_renders_core_and_layer_plan
+  def test_kubernetes_foundation_renders_ordered_layer_plan
     manifest = OPSd::Manifest.new(YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__)))
 
     Dir.mktmpdir("opsd-foundation-render") do |output_dir|
@@ -61,7 +61,12 @@ class KubernetesFoundationTest < Minitest::Test
       assert_includes main_tf, "modules-digitalocean.git//modules/vpc?ref=v1.0.0"
       refute_includes main_tf, "module.vpc[0].urn"
       assert File.file?(File.join(output_path, "opsd.layers.yaml"))
-      assert File.file?(File.join(output_path, "layers", "bootstrap", "README.md"))
+      plan = YAML.load_file(File.join(output_path, "opsd.layers.yaml"))
+      assert_equal %w[bootstrap infrastructure monitoring tools applications], plan.fetch("layers").map { |layer| layer.fetch("id") }
+      assert_equal [0, 10, 20, 30, 40], plan.fetch("layers").map { |layer| layer.fetch("order") }
+      assert File.file?(File.join(output_path, "layers", "00-bootstrap", "README.md"))
+      assert File.file?(File.join(output_path, "layers", "10-infrastructure", "README.md"))
+      assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "root app-of-apps"
     end
   end
 

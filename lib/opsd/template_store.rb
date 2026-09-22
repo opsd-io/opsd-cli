@@ -287,11 +287,11 @@ module OPSd
       return {} unless family == "kubernetes"
 
       {
-        "core" => { "enabled" => true },
-        "bootstrap" => { "argocd" => { "enabled" => true } },
-        "observability" => { "enabled" => false },
+        "bootstrap" => { "enabled" => true },
+        "infrastructure" => { "enabled" => true },
+        "monitoring" => { "enabled" => false },
         "tools" => { "enabled" => false },
-        "apps" => { "enabled" => false }
+        "applications" => { "enabled" => false }
       }
     end
 
