@@ -8,6 +8,7 @@ require "yaml"
 require "fileutils"
 
 require_relative "manifest"
+require_relative "kubernetes_module"
 require_relative "renderer"
 require_relative "template_store"
 require_relative "wizard_catalog"
@@ -35,7 +36,7 @@ module OPSd
       list: %w[blueprints],
       describe: %w[blueprint],
       init: %w[blueprint],
-      validate_render: %w[manifest],
+      validate_render: %w[manifest module],
       verify: %w[config plan lifecycle],
       export: %w[exit-pack],
       add: %w[compute-group database cache object-storage cdn-endpoint load-balancer node],
@@ -543,6 +544,8 @@ module OPSd
         return
       when "manifest"
         manifest_path = @argv.shift
+      when "module"
+        return run_validate_module
       else
         manifest_path = subject
       end
@@ -564,6 +567,20 @@ module OPSd
       puts
       puts "Next step:"
       puts "  opsd render manifest #{manifest_path} --output <directory>"
+    end
+
+    def run_validate_module
+      module_path = @argv.shift
+      return puts(validate_usage) if module_path.nil? || help_flag?(module_path) || help_requested?
+      raise "Usage: opsd validate module <module.yaml>" unless @argv.empty?
+
+      metadata = KubernetesModule.load(module_path)
+      metadata.validate!
+
+      puts "Kubernetes module metadata is valid: #{module_path}"
+      puts "Module: #{metadata.data.dig('metadata', 'id')}"
+      puts "Layer: #{metadata.data.dig('spec', 'layer')}"
+      puts "Ownership: #{metadata.data.dig('spec', 'ownership', 'type')}"
     end
 
     def run_verify
@@ -2034,7 +2051,7 @@ module OPSd
             "Workflow",
             [
               ["init", "Create starter manifests from blueprints"],
-              ["validate", "Validate a manifest"],
+              ["validate", "Validate a manifest or Kubernetes module metadata"],
               ["verify", "Verify config or plan against the OPSd contract"],
               ["render", "Render a manifest into a runnable OpenTofu stack"],
               ["export", "Package a rendered handoff into a portable exit pack"]
@@ -2338,7 +2355,7 @@ module OPSd
                     compadd -- $(_opsd_without_current "$line[CURRENT]" $(_opsd_profiles))
                   fi
                   ;;
-                "validate manifest"|"render manifest")
+                "validate manifest"|"validate module"|"render manifest")
                   if (( CURRENT >= 4 )) && ! _opsd_manifest_exact "$line[CURRENT]" "$line[CURRENT-1]"; then
                     compadd -- $(_opsd_without_current "$line[CURRENT]" $(_opsd_manifest_files))
                   fi
@@ -2734,12 +2751,12 @@ module OPSd
 
     def validate_usage
       help_block(
-        "Usage: opsd validate manifest <manifest.yaml>",
+        "Usage: opsd validate <manifest <manifest.yaml>|module <module.yaml>>",
         [
           [
             "Before render",
             [
-              ["check", "Check the manifest before rendering"]
+              ["check", "Check a manifest or Kubernetes module metadata before use"]
             ]
           ]
         ]

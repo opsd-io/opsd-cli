@@ -1,0 +1,23 @@
+apiVersion: opsd.io/modules/v1alpha1
+kind: KubernetesModule
+
+metadata:
+  id: root-app-of-apps
+  name: Root App of Apps
+  description: Bootstrap entrypoint that installs ArgoCD and hands off GitOps.
+
+spec:
+  layer: bootstrap
+  source:
+    type: helm
+    repository: https://charts.example.invalid/opsd
+    chart: root-app-of-apps
+  defaults: defaults.yaml
+  schema: schema.yaml
+  ownership:
+    type: official
+    repository: opsd-io/modules-kubernetes
+  supported_providers: [digitalocean, aws, azure, gcp]
+  provider_extensions: {}
+  validation:
+    mode: strict
