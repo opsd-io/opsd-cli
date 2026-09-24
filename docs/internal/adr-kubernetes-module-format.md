@@ -68,6 +68,8 @@ spec:
     type: helm
     repository: https://charts.example.invalid/opsd
     chart: root-app-of-apps
+    version: 1.4.2
+    digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
   defaults: defaults.yaml
   schema: schema.yaml
   ownership:
@@ -79,9 +81,16 @@ spec:
     mode: strict
 ```
 
-Source-specific version, ref, digest, and lock metadata are deliberately not
-defined here. They belong to #63 and are resolved by the client-owned lock
-workflow.
+Source pins are part of the module metadata and are mandatory:
+
+- `helm` and `oci` sources declare a chart `version` and the resolved
+  `sha256:` `digest`;
+- `git` sources declare a human-readable `ref` and the resolved full Git
+  `commit` SHA (40- or 64-character).
+
+The version/ref is the requested pin; the digest/commit records the exact
+artifact that was resolved. A client-owned lock workflow may update these
+fields, but an unlocked source is not valid module metadata.
 
 ## Ownership boundaries
 

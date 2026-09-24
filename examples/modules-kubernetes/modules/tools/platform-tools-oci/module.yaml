@@ -2,17 +2,17 @@ apiVersion: opsd.io/modules/v1alpha1
 kind: KubernetesModule
 
 metadata:
-  id: root-app-of-apps
-  name: Root App of Apps
-  description: Bootstrap entrypoint that installs ArgoCD and hands off GitOps.
+  id: platform-tools-oci
+  name: Platform Tools (OCI)
+  description: Provider-neutral platform tools distributed as an OCI chart.
 
 spec:
-  layer: bootstrap
+  layer: tools
   source:
-    type: helm
-    repository: https://charts.example.invalid/opsd
-    chart: root-app-of-apps
-    version: 1.4.2
+    type: oci
+    registry: registry.example.invalid/opsd
+    chart: platform-tools
+    version: 2.0.1
     digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
   defaults: defaults.yaml
   schema: schema.yaml

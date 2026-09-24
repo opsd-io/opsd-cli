@@ -12,6 +12,8 @@ module OPSd
     SOURCE_TYPES = %w[helm oci git].freeze
     OWNERSHIP_TYPES = %w[official custom].freeze
     VALIDATION_MODES = %w[strict permissive].freeze
+    DIGEST_PATTERN = /\Asha256:[0-9a-f]{64}\z/i
+    COMMIT_PATTERN = /\A[0-9a-f]{40}(?:[0-9a-f]{24})?\z/i
 
     class ValidationError < StandardError
       attr_reader :errors
@@ -113,14 +115,23 @@ module OPSd
       errors << "spec.source.type must be one of: #{SOURCE_TYPES.join(', ')}" unless SOURCE_TYPES.include?(type.to_s)
 
       required = case type.to_s
-                 when "helm" then %w[repository chart]
-                 when "oci" then %w[registry chart]
-                 when "git" then %w[repository path]
+                 when "helm" then %w[repository chart version digest]
+                 when "oci" then %w[registry chart version digest]
+                 when "git" then %w[repository path ref commit]
                  else []
                  end
       required.each do |key|
         errors << "spec.source.#{key} is required for source type #{type}" if blank?(source[key])
       end
+
+      if %w[helm oci].include?(type.to_s)
+        errors << "spec.source.version must be a non-empty string" unless non_empty_string?(source["version"])
+        errors << "spec.source.digest must be a sha256 digest" unless source["digest"].to_s.match?(DIGEST_PATTERN)
+      elsif type.to_s == "git"
+        errors << "spec.source.ref must be a non-empty string" unless non_empty_string?(source["ref"])
+        errors << "spec.source.commit must be a full Git commit SHA" unless source["commit"].to_s.match?(COMMIT_PATTERN)
+      end
+
       errors
     end
 
@@ -151,6 +162,10 @@ module OPSd
 
     def blank?(value)
       value.nil? || value.respond_to?(:empty?) && value.empty?
+    end
+
+    def non_empty_string?(value)
+      value.is_a?(String) && !value.empty?
     end
   end
 end
