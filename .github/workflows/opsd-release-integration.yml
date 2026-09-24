@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   release-integration:
-    name: qualified
+    name: release-integration / qualified
     if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
     runs-on: ubuntu-latest
     timeout-minutes: 100
