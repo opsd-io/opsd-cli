@@ -1,0 +1,2 @@
+gitops:
+  install_argocd: true
