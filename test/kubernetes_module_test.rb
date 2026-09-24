@@ -76,6 +76,17 @@ class KubernetesModuleTest < Minitest::Test
     assert_includes error.errors, "spec.source.digest is required for source type helm"
   end
 
+  def test_helm_source_requires_a_version
+    data = YAML.load_file(EXAMPLE_PATH)
+    data["spec"]["source"].delete("version")
+
+    error = assert_raises(OPSd::KubernetesModule::ValidationError) do
+      OPSd::KubernetesModule.new(data).validate!
+    end
+
+    assert_includes error.errors, "spec.source.version is required for source type helm"
+  end
+
   def test_oci_source_accepts_a_locked_chart
     data = YAML.load_file(EXAMPLE_PATH)
     data["spec"]["source"] = {
@@ -100,6 +111,33 @@ class KubernetesModuleTest < Minitest::Test
     }
 
     assert_equal true, OPSd::KubernetesModule.new(data).validate!
+  end
+
+  def test_git_source_requires_a_ref_and_commit
+    data = YAML.load_file(EXAMPLE_PATH)
+    data["spec"]["source"] = {
+      "type" => "git",
+      "repository" => "https://github.com/example/platform-modules.git",
+      "path" => "charts/platform-tools"
+    }
+
+    error = assert_raises(OPSd::KubernetesModule::ValidationError) do
+      OPSd::KubernetesModule.new(data).validate!
+    end
+
+    assert_includes error.errors, "spec.source.ref is required for source type git"
+    assert_includes error.errors, "spec.source.commit is required for source type git"
+  end
+
+  def test_git_source_rejects_a_short_commit
+    data = YAML.load_file(GIT_EXAMPLE_PATH)
+    data["spec"]["source"]["commit"] = "0123456789abcdef"
+
+    error = assert_raises(OPSd::KubernetesModule::ValidationError) do
+      OPSd::KubernetesModule.new(data).validate!
+    end
+
+    assert_includes error.errors, "spec.source.commit must be a full Git commit SHA"
   end
 
   def test_source_rejects_unlocked_artifact_records
