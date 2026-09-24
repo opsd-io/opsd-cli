@@ -197,36 +197,41 @@ rendered output is treated as managed-only.
 
 ### `spec.layers`
 
-Defines the platform layers requested for a Kubernetes environment. The
+Defines the ordered platform layers requested for a Kubernetes environment. The
 provider implements the infrastructure details for each layer while the
 manifest keeps the logical contract consistent across clouds.
 
-Supported layers are:
+The canonical layers and their fixed render order are:
 
-- `core` — network, Kubernetes, IAM/security, and provider foundation;
-- `bootstrap` — initial cluster services such as ArgoCD;
-- `observability` — monitoring, metrics, logs, and Grafana;
-- `tools` — ingress, certificates, DNS integration, and registries;
-- `apps` — application namespaces and workloads.
+| Order | Layer | Directory | Purpose |
+| ---: | --- | --- | --- |
+| 0 | `bootstrap` | `00-bootstrap` | Apply the root app-of-apps and install ArgoCD. |
+| 10 | `infrastructure` | `10-infrastructure` | Provider and cluster infrastructure integrations. |
+| 20 | `monitoring` | `20-monitoring` | Metrics, logs, alerts and dashboards. |
+| 30 | `tools` | `30-tools` | Ingress, certificates, DNS and registries. |
+| 40 | `applications` | `40-applications` | Application namespaces and workloads. |
 
-The current implementation only materializes the layer plan. The Helm/GitOps
-outputs for `bootstrap`, `observability`, `tools`, and `apps` will be added in
-their respective implementation stages.
+The order and directory names are owned by OPSd and cannot be changed in the
+manifest. Every declared layer requires an explicit boolean `enabled` flag.
+Omitted layers use the defaults from the layer contract: `bootstrap` and
+`infrastructure` are enabled; the remaining layers are disabled.
+
+The current renderer materializes the ordered layer plan and placeholders. The
+Helm/GitOps module outputs are added in their respective implementation stages.
 
 Example:
 
 ```yaml
-layers:
-  core:
-    enabled: true
+  layers:
   bootstrap:
-    argocd:
-      enabled: true
-  observability:
+    enabled: true
+  infrastructure:
+    enabled: true
+  monitoring:
     enabled: false
   tools:
     enabled: false
-  apps:
+  applications:
     enabled: false
 ```
 

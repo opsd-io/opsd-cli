@@ -71,16 +71,15 @@ spec:
   object_storage: []
   cdn_endpoints: []
   layers:
-    core:
-      enabled: true
     bootstrap:
-      argocd:
-        enabled: true
-    observability:
+      enabled: true
+    infrastructure:
+      enabled: true
+    monitoring:
       enabled: false
     tools:
       enabled: false
-    apps:
+    applications:
       enabled: false
   policies:
     drift_detection: strict

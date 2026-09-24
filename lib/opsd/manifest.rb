@@ -4,6 +4,48 @@ module OPSd
   class Manifest
     SUPPORTED_PROVIDERS = %w[digitalocean aws azure gcp].freeze
     SUPPORTED_EGRESS_PRESETS = %w[open web dns_only].freeze
+    KUBERNETES_LAYERS = [
+      {
+        "id" => "bootstrap",
+        "order" => 0,
+        "directory" => "00-bootstrap",
+        "name" => "Bootstrap",
+        "description" => "Bootstrap GitOps by applying the root app-of-apps.",
+        "default_enabled" => true
+      }.freeze,
+      {
+        "id" => "infrastructure",
+        "order" => 10,
+        "directory" => "10-infrastructure",
+        "name" => "Infrastructure",
+        "description" => "Provider and cluster infrastructure integrations.",
+        "default_enabled" => true
+      }.freeze,
+      {
+        "id" => "monitoring",
+        "order" => 20,
+        "directory" => "20-monitoring",
+        "name" => "Monitoring",
+        "description" => "Metrics, logs, alerts and dashboards.",
+        "default_enabled" => false
+      }.freeze,
+      {
+        "id" => "tools",
+        "order" => 30,
+        "directory" => "30-tools",
+        "name" => "Tools",
+        "description" => "Ingress, certificates, DNS and registries.",
+        "default_enabled" => false
+      }.freeze,
+      {
+        "id" => "applications",
+        "order" => 40,
+        "directory" => "40-applications",
+        "name" => "Applications",
+        "description" => "Application namespaces and workloads.",
+        "default_enabled" => false
+      }.freeze
+    ].freeze
 
     class ValidationError < StandardError
       attr_reader :errors
@@ -277,6 +319,16 @@ module OPSd
       value.is_a?(Hash) ? value : {}
     end
 
+    def kubernetes_layer_plan
+      KUBERNETES_LAYERS.map do |definition|
+        config = layers[definition["id"]] || {}
+        definition.merge(
+          "enabled" => config.fetch("enabled", definition["default_enabled"]),
+          "components" => config.fetch("components", {})
+        ).reject { |key, _| key == "default_enabled" }
+      end
+    end
+
     private
 
     def validate_common
@@ -374,12 +426,18 @@ module OPSd
     def validate_v2_layers(layers)
       return ["spec.layers must be a mapping"] unless layers.is_a?(Hash)
 
-      allowed_layers = %w[core bootstrap observability tools apps]
+      allowed_layers = KUBERNETES_LAYERS.map { |layer| layer["id"] }
       errors = []
       layers.each do |name, config|
         prefix = "spec.layers.#{name}"
         errors << "#{prefix} is not supported" unless allowed_layers.include?(name.to_s)
-        errors << "#{prefix} must be a mapping" unless config.is_a?(Hash)
+        next unless config.is_a?(Hash)
+
+        errors << "#{prefix}.enabled is required" unless config.key?("enabled")
+        unless [true, false].include?(config["enabled"])
+          errors << "#{prefix}.enabled must be a boolean"
+        end
+        errors << "#{prefix}.components must be a mapping" if config.key?("components") && !config["components"].is_a?(Hash)
       end
       errors
     end
