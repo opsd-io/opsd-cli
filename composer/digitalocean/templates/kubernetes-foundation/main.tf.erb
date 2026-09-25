@@ -109,9 +109,8 @@ module "kubernetes" {
   )
 }
 
-<% if bastion_enabled %>
 module "bastion" {
-  count  = 1
+  count  = <%= bastion_enabled ? 1 : 0 %>
   source = "<%= module_package_root %>//modules/bastion"
 
   name                    = "<%= manifest.metadata_name %>-bastion"
@@ -126,7 +125,6 @@ module "bastion" {
   ssh_allowed_cidrs       = <%= hcl_list(Array(bastion_config["ssh_allow_cidrs"])) %>
   outbound_rules           = <%= bastion_outbound_rules_hcl(bastion_config) %>
 }
-<% end %>
 
 <% if manifest.primary_cache %>
 module "valkey" {
