@@ -14,6 +14,18 @@
 
 - None yet.
 
+## [0.2.0](https://github.com/opsd-io/opsd-cli/compare/v0.1.0...v0.2.0) (2026-09-25)
+
+
+### Features
+
+* **cli:** add locked Kubernetes module sources ([#139](https://github.com/opsd-io/opsd-cli/issues/139)) ([8c35661](https://github.com/opsd-io/opsd-cli/commit/8c3566197ec94407c65fb1d129a82f9b2d9c2632))
+* **cli:** define bastion access contract ([#141](https://github.com/opsd-io/opsd-cli/issues/141)) ([a322558](https://github.com/opsd-io/opsd-cli/commit/a322558f62330050b2776d2d7873c82b42d812c0))
+* **cli:** define Kubernetes module metadata format ([#138](https://github.com/opsd-io/opsd-cli/issues/138)) ([07bdbd0](https://github.com/opsd-io/opsd-cli/commit/07bdbd0935b682c8dd7d9dfd92fada7700302365))
+* **cli:** define ordered Kubernetes layer contract ([#136](https://github.com/opsd-io/opsd-cli/issues/136)) ([471c437](https://github.com/opsd-io/opsd-cli/commit/471c43748ebf95f2e9deac18c65afd6c2c045ce6))
+* **cli:** extend Kubernetes platform manifest contract ([#140](https://github.com/opsd-io/opsd-cli/issues/140)) ([2a7c97e](https://github.com/opsd-io/opsd-cli/commit/2a7c97ec4e882c49f74309c755adf40f71b0e3b1))
+* **cli:** warn on unsafe DOKS control plane access ([#142](https://github.com/opsd-io/opsd-cli/issues/142)) ([a3d2745](https://github.com/opsd-io/opsd-cli/commit/a3d2745648fe13f2dba43f0f890bde0dcd99def0))
+
 ## [0.1.0](https://github.com/opsd-io/opsd-cli/compare/v2.1.0...v0.1.0) (2026-09-21)
 
 
