@@ -450,7 +450,10 @@ module OPSd
       layers.each do |name, config|
         prefix = "spec.layers.#{name}"
         errors << "#{prefix} is not supported" unless allowed_layers.include?(name.to_s)
-        next unless config.is_a?(Hash)
+        unless config.is_a?(Hash)
+          errors << "#{prefix} must be a mapping"
+          next
+        end
 
         errors << "#{prefix}.enabled is required" unless config.key?("enabled")
         unless [true, false].include?(config["enabled"])
@@ -495,6 +498,7 @@ module OPSd
           override.each_key do |key|
             errors << "#{provider_prefix}.#{key} is not supported" unless key.to_s == "values"
           end
+          errors << "#{provider_prefix}.values is required" unless override.key?("values")
           errors << "#{provider_prefix}.values must be a mapping" if override.key?("values") && !override["values"].is_a?(Hash)
         end
       end

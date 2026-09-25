@@ -158,6 +158,34 @@ class ManifestValidationTest < Minitest::Test
     assert_includes error.errors, "spec.layers.tools.components.Ingress Controller must be a DNS-like component identifier"
   end
 
+  def test_v2_rejects_non_mapping_layer
+    data = base_v2_manifest
+    data["spec"]["layers"] = { "tools" => true }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.tools must be a mapping"
+  end
+
+  def test_v2_requires_values_in_provider_override
+    data = base_v2_manifest
+    data["spec"]["layers"] = {
+      "tools" => {
+        "enabled" => true,
+        "components" => {
+          "ingress" => {
+            "enabled" => true,
+            "provider_overrides" => { "digitalocean" => {} }
+          }
+        }
+      }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.tools.components.ingress.provider_overrides.digitalocean.values is required"
+  end
+
   def test_v2_rejects_invalid_module_commit_pin
     data = base_v2_manifest
     data["spec"]["origin"]["modules"]["commit"] = "not-a-commit"
