@@ -4,6 +4,9 @@ module OPSd
   class Manifest
     SUPPORTED_PROVIDERS = %w[digitalocean aws azure gcp].freeze
     SUPPORTED_EGRESS_PRESETS = %w[open web dns_only].freeze
+    KUBERNETES_COMPONENT_KEYS = %w[enabled values provider_overrides].freeze
+    KUBERNETES_COMPONENT_ID_PATTERN = /\A[a-z0-9]+(?:-[a-z0-9]+)*\z/
+    GIT_COMMIT_PATTERN = /\A[0-9a-f]{40}(?:[0-9a-f]{24})?\z/i
     KUBERNETES_LAYERS = [
       {
         "id" => "bootstrap",
@@ -329,6 +332,19 @@ module OPSd
       end
     end
 
+    def kubernetes_component_values(layer:, component:, module_defaults: {}, provider_defaults: {})
+      layer_config = layers.fetch(layer.to_s, {})
+      component_config = layer_config.fetch("components", {}).fetch(component.to_s, {})
+      provider_values = component_config.fetch("provider_overrides", {}).fetch(provider.to_s, {}).fetch("values", {})
+
+      deep_merge(
+        module_defaults,
+        provider_defaults,
+        component_config.fetch("values", {}),
+        provider_values
+      )
+    end
+
     private
 
     def validate_common
@@ -398,6 +414,9 @@ module OPSd
           %w[repo version commit].each do |key|
             errors << "spec.origin.modules.#{key} is required" if blank?(modules[key])
           end
+          errors << "spec.origin.modules.repo must be a non-empty string" unless non_empty_string?(modules["repo"])
+          errors << "spec.origin.modules.version must be a non-empty string" unless non_empty_string?(modules["version"])
+          errors << "spec.origin.modules.commit must be a full Git commit SHA" unless modules["commit"].to_s.match?(GIT_COMMIT_PATTERN)
         end
       end
 
@@ -438,7 +457,48 @@ module OPSd
           errors << "#{prefix}.enabled must be a boolean"
         end
         errors << "#{prefix}.components must be a mapping" if config.key?("components") && !config["components"].is_a?(Hash)
+        next unless config["components"].is_a?(Hash)
+
+        config["components"].each do |component_id, component_config|
+          component_prefix = "#{prefix}.components.#{component_id}"
+          errors << "#{component_prefix} must be a DNS-like component identifier" unless component_id.to_s.match?(KUBERNETES_COMPONENT_ID_PATTERN)
+          errors.concat(validate_v2_component(component_config, component_prefix, layer_enabled: config["enabled"] == true))
+        end
       end
+      errors
+    end
+
+    def validate_v2_component(component, prefix, layer_enabled:)
+      return ["#{prefix} must be a mapping"] unless component.is_a?(Hash)
+
+      errors = []
+      component.each_key do |key|
+        errors << "#{prefix}.#{key} is not supported" unless KUBERNETES_COMPONENT_KEYS.include?(key.to_s)
+      end
+      errors << "#{prefix}.enabled is required" unless component.key?("enabled")
+      errors << "#{prefix}.enabled must be a boolean" unless [true, false].include?(component["enabled"])
+      errors << "#{prefix}.values must be a mapping" if component.key?("values") && !component["values"].is_a?(Hash)
+      unless layer_enabled
+        errors << "#{prefix}.enabled must be false when its layer is disabled" if component["enabled"] == true
+      end
+
+      overrides = component["provider_overrides"]
+      if component.key?("provider_overrides") && !overrides.is_a?(Hash)
+        errors << "#{prefix}.provider_overrides must be a mapping"
+      elsif overrides.is_a?(Hash)
+        overrides.each do |provider_name, override|
+          provider_prefix = "#{prefix}.provider_overrides.#{provider_name}"
+          errors << "#{provider_prefix} uses an unsupported provider" unless @supported_providers.include?(provider_name.to_s)
+          errors << "#{provider_prefix} must be a mapping" unless override.is_a?(Hash)
+          next unless override.is_a?(Hash)
+
+          override.each_key do |key|
+            errors << "#{provider_prefix}.#{key} is not supported" unless key.to_s == "values"
+          end
+          errors << "#{provider_prefix}.values must be a mapping" if override.key?("values") && !override["values"].is_a?(Hash)
+        end
+      end
+
       errors
     end
 
@@ -1073,6 +1133,22 @@ module OPSd
 
     def blank?(value)
       value.nil? || (value.respond_to?(:empty?) && value.empty?)
+    end
+
+    def non_empty_string?(value)
+      value.is_a?(String) && !value.empty?
+    end
+
+    def deep_merge(*maps)
+      maps.compact.reduce({}) do |merged, map|
+        map.each_with_object(merged) do |(key, value), result|
+          result[key] = if result[key].is_a?(Hash) && value.is_a?(Hash)
+                          deep_merge(result[key], value)
+                        else
+                          value
+                        end
+        end
+      end
     end
 
     def validate_security_egress(value, path, errors)

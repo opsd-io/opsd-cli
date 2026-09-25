@@ -51,7 +51,7 @@ class KubernetesFoundationTest < Minitest::Test
         module_source: {
           repo: "https://github.com/opsd-io/modules-digitalocean.git",
           version: "v1.0.0",
-          commit: "abcdef1234567890"
+          commit: "abcdef1234567890abcdef1234567890abcdef12"
         }
       )
 
@@ -90,7 +90,7 @@ class KubernetesFoundationTest < Minitest::Test
         module_source: {
           repo: "https://github.com/opsd-io/modules-digitalocean.git",
           version: "v1.0.0",
-          commit: "abcdef1234567890"
+          commit: "abcdef1234567890abcdef1234567890abcdef12"
         }
       )
 
@@ -124,7 +124,7 @@ class KubernetesFoundationTest < Minitest::Test
         module_source: {
           repo: "https://github.com/opsd-io/modules-digitalocean.git",
           version: "v1.0.0",
-          commit: "abcdef1234567890"
+          commit: "abcdef1234567890abcdef1234567890abcdef12"
         }
       )
 
@@ -159,7 +159,7 @@ class KubernetesFoundationTest < Minitest::Test
         module_source: {
           repo: "https://github.com/opsd-io/modules-digitalocean.git",
           version: "v1.0.0",
-          commit: "abcdef1234567890"
+          commit: "abcdef1234567890abcdef1234567890abcdef12"
         }
       )
 
@@ -192,7 +192,7 @@ class KubernetesFoundationTest < Minitest::Test
         module_source: {
           repo: "https://github.com/opsd-io/modules-digitalocean.git",
           version: "v1.0.0",
-          commit: "abcdef1234567890"
+          commit: "abcdef1234567890abcdef1234567890abcdef12"
         }
       )
 

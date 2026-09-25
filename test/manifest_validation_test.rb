@@ -51,6 +51,122 @@ class ManifestValidationTest < Minitest::Test
     assert_includes error.errors, "spec.layers.bootstrap.enabled must be a boolean"
   end
 
+  def test_v2_accepts_component_selection_and_provider_overrides
+    data = base_v2_manifest
+    data["spec"]["layers"] = {
+      "bootstrap" => {
+        "enabled" => true,
+        "components" => {
+          "root-app-of-apps" => { "enabled" => true }
+        }
+      },
+      "infrastructure" => {
+        "enabled" => true,
+        "components" => {
+          "cluster" => {
+            "enabled" => true,
+            "values" => {
+              "replicas" => 1,
+              "labels" => { "managed" => true }
+            },
+            "provider_overrides" => {
+              "digitalocean" => {
+                "values" => {
+                  "replicas" => 3,
+                  "labels" => { "region" => "fra1" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    manifest = OPSd::Manifest.new(data, profile_catalog: digitalocean_profile_catalog)
+    manifest.validate!
+
+    assert_equal(
+      {
+        "replicas" => 3,
+        "labels" => { "provider" => true, "managed" => true, "region" => "fra1" }
+      },
+      manifest.kubernetes_component_values(
+        layer: "infrastructure",
+        component: "cluster",
+        module_defaults: { "replicas" => 1 },
+        provider_defaults: { "labels" => { "provider" => true } }
+      )
+    )
+  end
+
+  def test_v2_rejects_enabled_component_in_disabled_layer
+    data = base_v2_manifest
+    data["spec"]["layers"] = {
+      "tools" => {
+        "enabled" => false,
+        "components" => {
+          "ingress" => { "enabled" => true }
+        }
+      }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.tools.components.ingress.enabled must be false when its layer is disabled"
+  end
+
+  def test_v2_rejects_invalid_component_and_provider_override_shapes
+    data = base_v2_manifest
+    data["spec"]["layers"] = {
+      "tools" => {
+        "enabled" => true,
+        "components" => {
+          "ingress" => {
+            "enabled" => "yes",
+            "unsupported" => true,
+            "values" => [],
+            "provider_overrides" => {
+              "unknown" => { "values" => [] }
+            }
+          }
+        }
+      }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.tools.components.ingress.unsupported is not supported"
+    assert_includes error.errors, "spec.layers.tools.components.ingress.enabled must be a boolean"
+    assert_includes error.errors, "spec.layers.tools.components.ingress.values must be a mapping"
+    assert_includes error.errors, "spec.layers.tools.components.ingress.provider_overrides.unknown uses an unsupported provider"
+    assert_includes error.errors, "spec.layers.tools.components.ingress.provider_overrides.unknown.values must be a mapping"
+  end
+
+  def test_v2_rejects_invalid_component_identifier
+    data = base_v2_manifest
+    data["spec"]["layers"] = {
+      "tools" => {
+        "enabled" => true,
+        "components" => {
+          "Ingress Controller" => { "enabled" => false }
+        }
+      }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.tools.components.Ingress Controller must be a DNS-like component identifier"
+  end
+
+  def test_v2_rejects_invalid_module_commit_pin
+    data = base_v2_manifest
+    data["spec"]["origin"]["modules"]["commit"] = "not-a-commit"
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.origin.modules.commit must be a full Git commit SHA"
+  end
+
   def test_manifest_requires_supported_api_version
     data = base_v2_manifest
     data["apiVersion"] = "opsd.io/unsupported"
@@ -580,7 +696,7 @@ class ManifestValidationTest < Minitest::Test
           "modules" => {
             "repo" => "https://github.com/opsd-io/modules-digitalocean.git",
             "version" => "v1.0.0",
-            "commit" => "abcdef1234567890"
+            "commit" => "abcdef1234567890abcdef1234567890abcdef12"
           }
         },
         "defaults" => {

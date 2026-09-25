@@ -209,7 +209,7 @@ class CliVerifyPlanTest < Minitest::Test
             "modules" => {
               "repo" => "local-workspace",
               "version" => "local-workspace",
-              "commit" => "unknown"
+              "commit" => "abcdef1234567890abcdef1234567890abcdef12"
             }
           },
           "defaults" => {},
