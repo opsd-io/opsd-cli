@@ -99,6 +99,54 @@ class ManifestValidationTest < Minitest::Test
     )
   end
 
+  def test_v2_accepts_bastion_keys_with_descriptions
+    data = base_v2_manifest
+    data["spec"]["layers"] = {
+      "infrastructure" => {
+        "enabled" => true,
+        "components" => {
+          "bastion" => {
+            "enabled" => true,
+            "values" => {
+              "user" => "bastion",
+              "digitalocean_keys" => [{ "ref" => "do-key-id", "description" => "Platform team" }],
+              "authorized_keys" => [{ "key" => "ssh-ed25519 AAAA", "description" => "Alice laptop" }],
+              "ssh_allow_cidrs" => ["198.51.100.0/24"],
+              "control_plane_cidrs" => ["203.0.113.10/32"],
+              "egress_preset" => "web"
+            }
+          }
+        }
+      }
+    }
+
+    OPSd::Manifest.new(data, profile_catalog: digitalocean_profile_catalog).validate!
+  end
+
+  def test_v2_rejects_invalid_bastion_key_shape
+    data = base_v2_manifest
+    data["spec"]["layers"] = {
+      "infrastructure" => {
+        "enabled" => true,
+        "components" => {
+          "bastion" => {
+            "enabled" => true,
+            "values" => {
+              "authorized_keys" => [{ "key" => "", "description" => 42 }],
+              "egress_preset" => "unrestricted"
+            }
+          }
+        }
+      }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data, profile_catalog: digitalocean_profile_catalog).validate! }
+
+    assert_includes error.errors, "spec.layers.infrastructure.components.bastion.values.authorized_keys[0].key must be a non-empty string"
+    assert_includes error.errors, "spec.layers.infrastructure.components.bastion.values.authorized_keys[0].description must be a string"
+    assert_includes error.errors, "spec.layers.infrastructure.components.bastion.values.egress_preset must be one of: open, web, dns_only"
+  end
+
   def test_v2_rejects_enabled_component_in_disabled_layer
     data = base_v2_manifest
     data["spec"]["layers"] = {

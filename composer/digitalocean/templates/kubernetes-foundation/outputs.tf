@@ -28,3 +28,13 @@ output "project_id" {
   description = "DigitalOcean project ID"
   value       = module.project.project_id
 }
+
+output "bastion_ip_address" {
+  description = "Stable bastion Reserved IP address, when the bastion is enabled"
+  value       = try(module.bastion[0].ip_address, null)
+}
+
+output "bastion_user" {
+  description = "Bastion SSH user, when the bastion is enabled"
+  value       = try(module.bastion[0].user, null)
+}

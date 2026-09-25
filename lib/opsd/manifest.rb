@@ -345,6 +345,10 @@ module OPSd
       )
     end
 
+    def kubernetes_component_enabled?(layer:, component:)
+      layers.fetch(layer.to_s, {}).fetch("components", {}).fetch(component.to_s, {}).fetch("enabled", false) == true
+    end
+
     private
 
     def validate_common
@@ -466,6 +470,7 @@ module OPSd
           component_prefix = "#{prefix}.components.#{component_id}"
           errors << "#{component_prefix} must be a DNS-like component identifier" unless component_id.to_s.match?(KUBERNETES_COMPONENT_ID_PATTERN)
           errors.concat(validate_v2_component(component_config, component_prefix, layer_enabled: config["enabled"] == true))
+          errors.concat(validate_v2_bastion_component(component_config, component_prefix)) if name.to_s == "infrastructure" && component_id.to_s == "bastion"
         end
       end
       errors
@@ -504,6 +509,53 @@ module OPSd
       end
 
       errors
+    end
+
+    def validate_v2_bastion_component(component, prefix)
+      return [] unless component.is_a?(Hash) && component["values"].is_a?(Hash)
+
+      values = component["values"]
+      errors = []
+      allowed_keys = %w[size image user digitalocean_keys authorized_keys ssh_allow_cidrs control_plane_cidrs egress_preset]
+      values.each_key do |key|
+        errors << "#{prefix}.values.#{key} is not supported" unless allowed_keys.include?(key.to_s)
+      end
+
+      %w[size image user egress_preset].each do |key|
+        errors << "#{prefix}.values.#{key} must be a non-empty string" if values.key?(key) && blank?(values[key])
+      end
+      if values.key?("egress_preset") && !SUPPORTED_EGRESS_PRESETS.include?(values["egress_preset"].to_s)
+        errors << "#{prefix}.values.egress_preset must be one of: #{SUPPORTED_EGRESS_PRESETS.join(', ')}"
+      end
+
+      %w[ssh_allow_cidrs control_plane_cidrs].each do |key|
+        errors << "#{prefix}.values.#{key} must be an array" if values.key?(key) && !values[key].is_a?(Array)
+      end
+
+      errors.concat(validate_v2_bastion_keys(values["digitalocean_keys"], "#{prefix}.values.digitalocean_keys", reference: true)) if values.key?("digitalocean_keys")
+      errors.concat(validate_v2_bastion_keys(values["authorized_keys"], "#{prefix}.values.authorized_keys", reference: false)) if values.key?("authorized_keys")
+      errors
+    end
+
+    def validate_v2_bastion_keys(keys, prefix, reference:)
+      return ["#{prefix} must be an array"] unless keys.is_a?(Array)
+
+      keys.each_with_index.flat_map do |entry, index|
+        entry_prefix = "#{prefix}[#{index}]"
+        unless entry.is_a?(Hash)
+          next ["#{entry_prefix} must be a mapping"]
+        end
+
+        errors = []
+        allowed_keys = reference ? %w[ref description] : %w[key description]
+        entry.each_key do |key|
+          errors << "#{entry_prefix}.#{key} is not supported" unless allowed_keys.include?(key.to_s)
+        end
+        required_key = reference ? "ref" : "key"
+        errors << "#{entry_prefix}.#{required_key} must be a non-empty string" if blank?(entry[required_key])
+        errors << "#{entry_prefix}.description must be a string" if entry.key?("description") && !entry["description"].is_a?(String)
+        errors
+      end
     end
 
     def validate_v2_compute_groups(compute_groups, node_ids:, family:)
