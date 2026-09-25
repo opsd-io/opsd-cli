@@ -219,6 +219,44 @@ Omitted layers use the defaults from the layer contract: `bootstrap` and
 The current renderer materializes the ordered layer plan and placeholders. The
 Helm/GitOps module outputs are added in their respective implementation stages.
 
+#### Layer components
+
+Each layer may select components from the catalog exposed by the pinned
+Kubernetes module release. Component identifiers are stable module IDs; the
+CLI does not hardcode the catalog so new module releases can add components
+without requiring a CLI release.
+
+```yaml
+spec:
+  layers:
+    tools:
+      enabled: true
+      components:
+        ingress:
+          enabled: true
+          values:
+            replicas: 2
+          provider_overrides:
+            digitalocean:
+              values:
+                service_type: LoadBalancer
+```
+
+Every selected component requires an explicit boolean `enabled` value. A
+component cannot be enabled while its parent layer is disabled. Component
+values are merged in this order, from lowest to highest precedence:
+
+1. module defaults;
+2. provider defaults;
+3. manifest component `values`;
+4. manifest `provider_overrides.<provider>.values`.
+
+The module release is pinned once as a whole in `spec.origin.modules`; a
+component does not carry a separate source pin. Official module schemas use
+JSON Schema and are strict. Custom modules must be explicitly marked
+permissive by their module metadata before they can accept provider-specific
+extensions.
+
 Example:
 
 ```yaml
