@@ -116,7 +116,35 @@ module OPSd
     def validate_policy_findings(manifest)
       findings = []
       findings.concat(public_exposure_warning(manifest))
+      findings.concat(control_plane_firewall_warnings(manifest))
       findings.concat(reliability_warning(manifest))
+      findings
+    end
+
+    def control_plane_firewall_warnings(manifest)
+      return [] unless manifest.provider == "digitalocean" && manifest.family == "kubernetes"
+
+      bastion_values = manifest.kubernetes_component_values(layer: "infrastructure", component: "bastion")
+      control_plane_cidrs = Array(bastion_values["control_plane_cidrs"]).filter_map do |cidr|
+        cidr.to_s.strip unless cidr.to_s.strip.empty?
+      end
+      bastion_enabled = manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "bastion")
+      findings = []
+
+      if !bastion_enabled && control_plane_cidrs.empty?
+        findings << policy_finding(
+          "OPSD-SEC-002",
+          "DOKS control-plane firewall is disabled; the Kubernetes API endpoint remains publicly reachable."
+        )
+      end
+
+      if control_plane_cidrs.any? { |cidr| ["0.0.0.0/0", "::/0"].include?(cidr) }
+        findings << policy_finding(
+          "OPSD-SEC-003",
+          "DOKS control-plane firewall allows unrestricted public access; replace /0 sources with explicit operator CIDRs."
+        )
+      end
+
       findings
     end
 
@@ -158,6 +186,12 @@ module OPSd
       pack = @contract_store.rule_pack(pack_name)
       rules = pack.is_a?(Hash) ? Array(pack["rules"]) : []
       rules.find { |rule| rule.is_a?(Hash) && rule["id"] == rule_id }
+    end
+
+    def policy_finding(rule_id, fallback_message)
+      rule = rule_by_id("security", rule_id)
+      message = rule.nil? ? fallback_message : rule.fetch("summary")
+      finding("warning", rule_id, message)
     end
 
     def finding(severity, code, message)

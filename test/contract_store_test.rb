@@ -26,6 +26,8 @@ class ContractStoreTest < Minitest::Test
     security = store.rule_pack("security")
     assert_equal 1, security.fetch("version")
     assert_includes security.fetch("rules").map { |rule| rule["id"] }, "OPSD-SEC-001"
+    assert_includes security.fetch("rules").map { |rule| rule["id"] }, "OPSD-SEC-002"
+    assert_includes security.fetch("rules").map { |rule| rule["id"] }, "OPSD-SEC-003"
   end
 
   def test_missing_contract_file_raises_a_clear_error
