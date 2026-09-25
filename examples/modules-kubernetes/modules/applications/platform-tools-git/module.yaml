@@ -1,0 +1,25 @@
+apiVersion: opsd.io/modules/v1alpha1
+kind: KubernetesModule
+
+metadata:
+  id: platform-tools-git
+  name: Platform Tools (Git)
+  description: Provider-neutral platform tools sourced from a Git chart repository.
+
+spec:
+  layer: applications
+  source:
+    type: git
+    repository: https://github.com/example/platform-modules.git
+    path: charts/platform-tools
+    ref: v2.0.1
+    commit: 0123456789abcdef0123456789abcdef01234567
+  defaults: defaults.yaml
+  schema: schema.yaml
+  ownership:
+    type: official
+    repository: opsd-io/modules-kubernetes
+  supported_providers: [digitalocean, aws, azure, gcp]
+  provider_extensions: {}
+  validation:
+    mode: strict
