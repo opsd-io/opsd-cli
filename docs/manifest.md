@@ -216,6 +216,42 @@ manifest. Every declared layer requires an explicit boolean `enabled` flag.
 Omitted layers use the defaults from the layer contract: `bootstrap` and
 `infrastructure` are enabled; the remaining layers are disabled.
 
+The infrastructure layer may include an optional `bastion` component. When it
+is enabled, the DigitalOcean renderer provisions a bastion in the cluster VPC,
+assigns a Reserved IP, and adds that address to the DOKS control-plane firewall
+sources. DigitalOcean SSH key references and additional inline public keys are
+separate inputs; inline keys may include a description for generated handoff
+documentation:
+
+```yaml
+spec:
+  layers:
+    infrastructure:
+      enabled: true
+      components:
+        bastion:
+          enabled: true
+          values:
+            user: bastion
+            digitalocean_keys:
+              - ref: platform-admin-key
+                description: Platform team key
+            authorized_keys:
+              - key: ssh-ed25519 AAAA... alice@example
+                description: Alice laptop
+            ssh_allow_cidrs:
+              - 198.51.100.0/24
+            control_plane_cidrs:
+              - 203.0.113.10/32
+            egress_preset: web
+```
+
+Disabling the component removes the bastion and its Reserved IP. Kubernetes
+credentials are not installed on the bastion; access is expected to use a
+local SSH tunnel or `ProxyJump`. The module provisions and hardens the SSH
+server, disables root and password authentication, and stores operator keys
+under `/etc/ssh/authorized_keys/<user>` instead of the user's home directory.
+
 The current renderer materializes the ordered layer plan and placeholders. The
 Helm/GitOps module outputs are added in their respective implementation stages.
 

@@ -17,10 +17,14 @@ provider "digitalocean" {
 <% postgres_module_names = postgres_databases.each_index.map { |index| index.zero? ? "postgres" : "postgres_#{index + 1}" } %>
 <% mysql_databases = manifest.databases.select { |database| database.fetch("engine") == "mysql" } %>
 <% mysql_module_names = mysql_databases.each_index.map { |index| index.zero? ? "mysql" : "mysql_#{index + 1}" } %>
+<% bastion_enabled = manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "bastion") %>
+<% bastion_config = manifest.kubernetes_component_values(layer: "infrastructure", component: "bastion") %>
+<% bastion_control_plane_cidrs = Array(bastion_config["control_plane_cidrs"]).select { |cidr| cidr.is_a?(String) && !cidr.strip.empty? } %>
 <% project_optional_urns = [] %>
 <% project_optional_urns << "module.valkey.urn" if manifest.primary_cache %>
 <% project_optional_urns.concat(postgres_module_names.map { |name| "module.#{name}.urn" }) %>
 <% project_optional_urns.concat(mysql_module_names.map { |name| "module.#{name}.urn" }) %>
+<% project_optional_urns << "module.bastion[0].urn" if bastion_enabled %>
 
 module "vpc" {
   count  = var.create_vpc ? 1 : 0
@@ -98,7 +102,31 @@ module "kubernetes" {
   maintenance_day        = var.maintenance_day
   maintenance_start_time = var.maintenance_start_time
   maintenance_duration   = var.maintenance_duration
+  control_plane_firewall_enabled = <%= bastion_enabled || bastion_control_plane_cidrs.any? %>
+  control_plane_firewall_allowed_addresses = concat(
+    <%= hcl_list(bastion_control_plane_cidrs) %>,
+    <%= bastion_enabled ? '["${module.bastion[0].ip_address}/32"]' : "[]" %>
+  )
 }
+
+<% if bastion_enabled %>
+module "bastion" {
+  count  = 1
+  source = "<%= module_package_root %>//modules/bastion"
+
+  name                    = "<%= manifest.metadata_name %>-bastion"
+  region                  = var.region
+  size                    = "<%= bastion_config.fetch("size", "s-1vcpu-1gb") %>"
+  image                   = "<%= bastion_config.fetch("image", "ubuntu-24-04-x64") %>"
+  vpc_uuid                = local.vpc_uuid_effective
+  tags                    = var.cluster_tags
+  digitalocean_keys       = <%= hcl_list_of_objects(bastion_ssh_keys_payload(bastion_config)) %>
+  authorized_keys         = <%= hcl_list_of_objects(bastion_authorized_keys_payload(bastion_config)) %>
+  cloudinit_user          = "<%= bastion_config.fetch("user", "bastion") %>"
+  ssh_allowed_cidrs       = <%= hcl_list(Array(bastion_config["ssh_allow_cidrs"])) %>
+  outbound_rules           = <%= bastion_outbound_rules_hcl(bastion_config) %>
+}
+<% end %>
 
 <% if manifest.primary_cache %>
 module "valkey" {

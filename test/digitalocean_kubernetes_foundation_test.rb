@@ -70,6 +70,50 @@ class KubernetesFoundationTest < Minitest::Test
     end
   end
 
+  def test_kubernetes_foundation_renders_enabled_bastion_and_control_plane_sources
+    manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+    manifest_data["spec"]["layers"]["infrastructure"] = {
+      "enabled" => true,
+      "components" => {
+        "bastion" => {
+          "enabled" => true,
+          "values" => {
+            "digitalocean_keys" => [{ "ref" => "do-key-id", "description" => "Platform team" }],
+            "authorized_keys" => [{ "key" => "ssh-ed25519 AAAA", "description" => "Alice laptop" }],
+            "ssh_allow_cidrs" => ["198.51.100.0/24"],
+            "control_plane_cidrs" => ["203.0.113.10/32"]
+          }
+        }
+      }
+    }
+    manifest = OPSd::Manifest.new(manifest_data)
+
+    Dir.mktmpdir("opsd-foundation-bastion-render") do |output_dir|
+      output_path = File.join(output_dir, "generated")
+      OPSd::Renderer.new(app_root: File.expand_path("..", __dir__), workspace_root: output_dir).render(
+        manifest,
+        output_path,
+        module_source: {
+          repo: "https://github.com/opsd-io/modules-digitalocean.git",
+          version: "v1.0.0",
+          commit: "abcdef1234567890abcdef1234567890abcdef12"
+        }
+      )
+
+      main_tf = File.read(File.join(output_path, "main.tf"))
+      assert_includes main_tf, 'module "bastion"'
+      assert_includes main_tf, "modules-digitalocean.git//modules/bastion?ref=v1.0.0"
+      assert_includes main_tf, '"do-key-id"'
+      assert_includes main_tf, 'description = "Alice laptop"'
+      assert_includes main_tf, '"203.0.113.10/32"'
+      assert_includes main_tf, '"${module.bastion[0].ip_address}/32"'
+      assert File.file?(File.join(output_path, "bastion-access.md"))
+      handoff = File.read(File.join(output_path, "bastion-access.md"))
+      assert_includes handoff, "does not receive a kubeconfig"
+      assert_includes handoff, "Platform team"
+    end
+  end
+
   def test_kubernetes_foundation_renders_optional_valkey
     manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
     manifest_data.fetch("spec").fetch("caches") << {

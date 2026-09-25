@@ -29,6 +29,7 @@ module OPSd
       FileUtils.mkdir_p(output_path.dirname)
       generate_scenario(output_path, manifest, scenario_id, provider: provider, module_source: module_source)
       generate_layer_plan(output_path, manifest) if manifest.family == "kubernetes"
+      generate_bastion_handoff(output_path, manifest) if manifest.family == "kubernetes" && manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "bastion")
 
       tfvars_path = output_path.join("opsd.auto.tfvars")
       tfvars_path.write(render_tfvars(manifest, scenario_id, provider: provider))
@@ -131,6 +132,44 @@ module OPSd
           This layer is planned in `opsd.layers.yaml` but is not generated yet.
         README
       end
+    end
+
+    def generate_bastion_handoff(output_path, manifest)
+      config = manifest.kubernetes_component_values(layer: "infrastructure", component: "bastion")
+      user = config.fetch("user", "bastion")
+      key_descriptions = (Array(config["digitalocean_keys"]) + Array(config["authorized_keys"])).filter_map do |key|
+        description = key.is_a?(Hash) ? key["description"] : nil
+        description.is_a?(String) && !description.strip.empty? ? "- #{description}" : nil
+      end
+      key_summary = key_descriptions.empty? ? "- No additional key descriptions were provided." : key_descriptions.join("\n")
+      output_path.join("bastion-access.md").write(<<~MARKDOWN)
+        # Bastion access
+
+        The bastion is provisioned with a Reserved IP and the non-root SSH user
+        `#{user}`. The bastion does not receive a kubeconfig or Kubernetes
+        credentials.
+
+        Configured SSH keys:
+
+        #{key_summary}
+
+        Retrieve the address from the generated stack:
+
+        ```sh
+        BASTION_IP="$(tofu output -raw bastion_ip_address)"
+        CLUSTER_HOST="$(tofu output -raw cluster_endpoint | sed -E 's#^https?://##; s#/$##')"
+        ```
+
+        Use a local tunnel when the Kubernetes API must be reached through the
+        bastion:
+
+        ```sh
+        ssh -N -L 6443:${CLUSTER_HOST}:443 #{user}@${BASTION_IP}
+        ```
+
+        Keep the kubeconfig on the operator workstation and configure its API
+        server as `https://127.0.0.1:6443` for the duration of the tunnel.
+      MARKDOWN
     end
 
     def module_source_path(module_path, provider: @current_render_provider, module_source: nil)
@@ -554,7 +593,7 @@ module OPSd
       outer_indent = " " * indent
       inner_indent = " " * (indent + 2)
       body = hash.map do |key, value|
-        %(#{inner_indent}#{key} = #{hcl_scalar(value)})
+        %(#{inner_indent}#{key} = #{hcl_value(value, indent: indent + 2)})
       end.join("\n")
       "{\n#{body}\n#{outer_indent}}"
     end
@@ -585,6 +624,66 @@ module OPSd
         value.to_s
       else
         JSON.generate(value.to_s)
+      end
+    end
+
+    def hcl_value(value, indent: 0)
+      case value
+      when Array
+        hcl_list(value)
+      when Hash
+        hcl_object(value, indent: indent)
+      else
+        hcl_scalar(value)
+      end
+    end
+
+    def bastion_ssh_keys_payload(config)
+      Array(config["digitalocean_keys"]).filter_map do |entry|
+        next unless entry.is_a?(Hash)
+
+        next unless entry["ref"].is_a?(String) && !entry["ref"].strip.empty?
+
+        { "ref" => entry["ref"], "description" => entry["description"] }
+      end
+    end
+
+    def bastion_authorized_keys_payload(config)
+      Array(config["authorized_keys"]).filter_map do |entry|
+        next unless entry.is_a?(Hash)
+        next unless entry["key"].is_a?(String) && !entry["key"].strip.empty?
+
+        {
+          "key" => entry["key"],
+          "description" => entry["description"]
+        }
+      end
+    end
+
+    def bastion_outbound_rules_hcl(config)
+      rules = case config.fetch("egress_preset", "web")
+      when "dns_only"
+        egress_outbound_rules(["53"], protocols: %w[tcp udp])
+      when "open"
+        egress_outbound_rules(["1-65535"], protocols: %w[tcp udp]) +
+          egress_outbound_rules([nil], protocols: ["icmp"])
+      else
+        egress_outbound_rules(["53"], protocols: %w[tcp udp]) +
+          egress_outbound_rules(["80", "443"], protocols: ["tcp"]) +
+          egress_outbound_rules(["123"], protocols: ["udp"])
+      end
+      hcl_list_of_objects(rules)
+    end
+
+    def egress_outbound_rules(ports, protocols:)
+      ports.flat_map do |port|
+        protocols.map do |protocol|
+          {
+            "protocol" => protocol,
+            "port_range" => port,
+            "destination_addresses" => ["0.0.0.0/0", "::/0"]
+          }.compact
+        end
       end
     end
 
