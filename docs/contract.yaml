@@ -132,6 +132,16 @@ rule_packs:
         summary: Production databases must use private networking and backups.
         applies_to:
           - databases
+      - id: OPSD-SEC-002
+        severity: warning
+        summary: DOKS control-plane firewall should be enabled with explicit operator sources.
+        applies_to:
+          - kubernetes
+      - id: OPSD-SEC-003
+        severity: warning
+        summary: DOKS control-plane firewall should not allow unrestricted public access.
+        applies_to:
+          - kubernetes
       - id: OPSD-SUPPLY-004
         severity: blocking
         summary: Modules and providers must be pinned and provisioners are not allowed.

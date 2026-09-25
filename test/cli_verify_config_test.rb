@@ -50,6 +50,44 @@ class CliVerifyConfigTest < Minitest::Test
     end
   end
 
+  def test_verify_config_reports_doks_control_plane_firewall_findings
+    manifest = supported_manifest
+    manifest["spec"]["origin"].merge!(
+      "blueprint" => "kubernetes-basic",
+      "variant" => "default",
+      "family" => "kubernetes",
+      "stack" => "kubernetes-basic"
+    )
+    manifest["spec"]["layers"] = {
+      "infrastructure" => {
+        "enabled" => true,
+        "components" => {
+          "bastion" => {
+            "enabled" => false,
+            "values" => {}
+          }
+        }
+      }
+    }
+    instance = OPSd::Manifest.new(manifest)
+    verifier = OPSd::ConfigVerifier.new(
+      contract_store: OPSd::ContractStore.new(app_root: File.expand_path("..", __dir__)),
+      template_store: nil
+    )
+
+    findings = verifier.send(:control_plane_firewall_warnings, instance)
+
+    assert_equal ["OPSD-SEC-002"], findings.map(&:code)
+    assert findings.all? { |finding| finding.severity == "warning" }
+
+    instance.data["spec"]["layers"]["infrastructure"]["components"]["bastion"]["values"] = {
+      "control_plane_cidrs" => ["0.0.0.0/0"]
+    }
+    findings = verifier.send(:control_plane_firewall_warnings, instance)
+
+    assert_equal ["OPSD-SEC-003"], findings.map(&:code)
+  end
+
   def test_verify_config_reports_blocking_findings_for_unsupported_path
     Dir.mktmpdir("opsd-verify") do |workspace|
       manifest_path = File.join(workspace, "manifest.yaml")

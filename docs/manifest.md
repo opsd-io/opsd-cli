@@ -252,6 +252,12 @@ local SSH tunnel or `ProxyJump`. The module provisions and hardens the SSH
 server, disables root and password authentication, and stores operator keys
 under `/etc/ssh/authorized_keys/<user>` instead of the user's home directory.
 
+For a Kubernetes foundation, the control-plane firewall is enabled when the
+bastion is enabled or when `control_plane_cidrs` is configured. The bastion's
+Reserved IP is added automatically when the bastion is enabled. Configuration
+verification warns when the firewall is disabled or when a `/0` source exposes
+the Kubernetes API to unrestricted public access.
+
 The current renderer materializes the ordered layer plan and placeholders. The
 Helm/GitOps module outputs are added in their respective implementation stages.
 
