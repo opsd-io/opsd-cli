@@ -10,7 +10,9 @@ permissions:
 jobs:
   release-integration:
     name: release-integration / qualified
-    if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
+    # Run the expensive DigitalOcean qualification only for Release Please PRs.
+    # Regular PRs still receive a successful skipped required check.
+    if: ${{ startsWith(github.event.pull_request.head.ref, 'release-please--') }}
     # This job waits for the private workflow, whose jobs use the single
     # self-hosted runner. Keep the polling job off that runner to avoid a
     # queue deadlock.
