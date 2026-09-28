@@ -11,7 +11,10 @@ jobs:
   release-integration:
     name: release-integration / qualified
     if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
-    runs-on: [self-hosted, Linux, X64]
+    # This job waits for the private workflow, whose jobs use the single
+    # self-hosted runner. Keep the polling job off that runner to avoid a
+    # queue deadlock.
+    runs-on: ubuntu-latest
     timeout-minutes: 100
     steps:
       - name: Create release qualification token
