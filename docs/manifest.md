@@ -292,6 +292,11 @@ spec:
 `environment_path` is a relative path within the repository; `..` segments are
 not allowed. The revision may name a branch, tag, or commit.
 
+Older manifests using `repository: owner/repo` and `branch` remain accepted;
+they resolve to the GitHub HTTPS URL and default to the repository root (`.`).
+New manifests should use the explicit URL, revision, and environment path
+fields above.
+
 When the bastion is enabled, rendering also produces `bastion-access.md` with
 operator examples for direct SSH access, Kubernetes API tunnels, private
 database tunnels, and a reusable `~/.ssh/config` alias. The generated guide

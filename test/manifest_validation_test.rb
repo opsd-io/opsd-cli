@@ -60,6 +60,40 @@ class ManifestValidationTest < Minitest::Test
     assert_includes error.errors, "spec.compute_groups[0].delivery.source.github.environment_path must be a safe relative path"
   end
 
+  def test_kubernetes_gitops_maps_legacy_github_repository_and_branch
+    data = kubernetes_manifest
+    data.dig("spec", "compute_groups", 0, "delivery", "source", "github").replace(
+      "repository" => "acme/platform",
+      "branch" => "production"
+    )
+    manifest = OPSd::Manifest.new(data)
+
+    manifest.validate!
+
+    assert_equal(
+      {
+        "repository_url" => "https://github.com/acme/platform.git",
+        "revision" => "production",
+        "environment_path" => "."
+      },
+      manifest.gitops_repository
+    )
+  end
+
+  def test_kubernetes_gitops_keeps_legacy_blueprint_placeholders_out_of_render_data
+    data = kubernetes_manifest
+    data.dig("spec", "compute_groups", 0, "delivery", "source", "github").replace(
+      "repository" => "replace-with-your-github-repository",
+      "branch" => "main"
+    )
+    manifest = OPSd::Manifest.new(data)
+
+    manifest.validate!
+
+    assert_nil manifest.gitops_repository
+    assert_empty manifest.kubernetes_layer_plan_data
+  end
+
   def test_v2_rejects_unknown_kubernetes_layer
     data = base_v2_manifest
     data["spec"]["layers"] = { "unknown" => {} }
