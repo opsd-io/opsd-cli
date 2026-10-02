@@ -23,11 +23,12 @@ require_relative "exit_pack_exporter"
 require_relative "manifest_capabilities_validator"
 require_relative "provider_catalog_store"
 require_relative "version"
+require_relative "kubernetes_bootstrap"
 
 module OPSd
   class CLI
     COMPLETION_COMMANDS = %w[
-      version completion config list describe init validate verify render export add resize scale attach detach remove blueprints help
+      version completion config list describe init validate verify render bootstrap export add resize scale attach detach remove blueprints help
     ].freeze
     COMPLETION_SUBCOMMANDS = {
       completion: %w[install bash zsh fish],
@@ -93,6 +94,8 @@ module OPSd
         run_verify
       when "render"
         run_render
+      when "bootstrap"
+        run_bootstrap
       when "export"
         run_export
       when "add"
@@ -181,6 +184,8 @@ module OPSd
         puts verify_usage
       when "render"
         puts render_usage
+      when "bootstrap"
+        puts bootstrap_usage
       when "export"
         puts export_usage
       when "add"
@@ -649,6 +654,14 @@ module OPSd
       puts "  tofu init -backend=false -input=false"
       puts "  tofu plan"
       puts "  tofu apply"
+      puts "  opsd bootstrap  # optional: install Argo CD in the active Kubernetes context"
+    end
+
+    def run_bootstrap
+      return puts(bootstrap_usage) if help_requested?
+      raise "Usage: opsd bootstrap" unless @argv.empty?
+
+      KubernetesBootstrap.new.run
     end
 
     def run_export
@@ -2054,6 +2067,7 @@ module OPSd
               ["validate", "Validate a manifest or Kubernetes module metadata"],
               ["verify", "Verify config or plan against the OPSd contract"],
               ["render", "Render a manifest into a runnable OpenTofu stack"],
+              ["bootstrap", "Wait for a Kubernetes cluster and install Argo CD"],
               ["export", "Package a rendered handoff into a portable exit pack"]
             ]
           ],
@@ -2787,6 +2801,23 @@ module OPSd
             "Options",
             [
               ["--output <directory>", "Write the runnable OpenTofu stack to this directory"]
+            ]
+          ]
+        ]
+      )
+    end
+
+    def bootstrap_usage
+      help_block(
+        "Usage: opsd bootstrap",
+        [
+          [
+            "Description",
+            [
+              ["Behavior", "Wait for nodes in the active kubectl context to become Ready, then install Argo CD."],
+              ["Requirements", "Requires kubectl, Helm and Git to be available in PATH."],
+              ["Module source", "Reads the Argo CD module from modules-kubernetes at main by default; override with OPSD_MODULES_KUBERNETES_REF."],
+              ["Repeat runs", "Safe to rerun on a bootstrapped cluster."]
             ]
           ]
         ]
