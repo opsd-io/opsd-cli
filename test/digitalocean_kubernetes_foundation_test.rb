@@ -38,7 +38,16 @@ class KubernetesFoundationTest < Minitest::Test
   end
 
   def test_kubernetes_foundation_renders_ordered_layer_plan
-    manifest = OPSd::Manifest.new(YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__)))
+    manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+    delivery = manifest_data.dig("spec", "compute_groups", 0, "delivery")
+    delivery["secret_env"] = { "GIT_TOKEN" => "keep-out-of-generated-files" }
+    delivery.dig("source", "github").merge!(
+      "repository_url" => "https://github.com/customer/platform.git",
+      "revision" => "release/production",
+      "environment_path" => "clusters/production"
+    )
+    manifest = OPSd::Manifest.new(manifest_data)
+    manifest.validate!
 
     Dir.mktmpdir("opsd-foundation-render") do |output_dir|
       output_path = File.join(output_dir, "generated")
@@ -64,6 +73,15 @@ class KubernetesFoundationTest < Minitest::Test
       refute_includes main_tf, "module.vpc[0].urn"
       assert File.file?(File.join(output_path, "opsd.layers.yaml"))
       plan = YAML.load_file(File.join(output_path, "opsd.layers.yaml"))
+      refute_includes File.read(File.join(output_path, "opsd.layers.yaml")), "keep-out-of-generated-files"
+      assert_equal(
+        {
+          "repository_url" => "https://github.com/customer/platform.git",
+          "revision" => "release/production",
+          "environment_path" => "clusters/production"
+        },
+        plan.dig("gitops", "repository")
+      )
       assert_equal %w[bootstrap infrastructure monitoring tools applications], plan.fetch("layers").map { |layer| layer.fetch("id") }
       assert_equal [0, 10, 20, 30, 40], plan.fetch("layers").map { |layer| layer.fetch("order") }
       assert File.file?(File.join(output_path, "layers", "00-bootstrap", "README.md"))

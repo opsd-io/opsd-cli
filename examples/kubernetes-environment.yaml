@@ -54,13 +54,14 @@ spec:
         # Protect the cluster from accidental Terraform destruction.
         prevent_destroy: true
       delivery:
-        # Placeholder delivery contract for cluster-level GitOps integration.
+        # Client-owned GitOps source; repository credentials stay outside this file.
         mode: gitops
         source:
           mode: github
           github:
-            repository: acme/platform
-            branch: main
+            repository_url: https://github.com/acme/platform.git
+            revision: main
+            environment_path: environments/production
         bootstrap: {}
         env: {}
         secret_env: {}

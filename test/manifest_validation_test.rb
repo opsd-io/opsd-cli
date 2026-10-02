@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require "yaml"
 require "opsd/manifest"
 
 class ManifestValidationTest < Minitest::Test
@@ -22,6 +23,41 @@ class ManifestValidationTest < Minitest::Test
 
     OPSd::Manifest.new(data, profile_catalog: digitalocean_profile_catalog).validate!
     assert_equal true, OPSd::Manifest.new(data).layers.dig("infrastructure", "enabled")
+  end
+
+  def test_kubernetes_gitops_repository_defaults_revision_to_main
+    data = kubernetes_manifest
+    data.dig("spec", "compute_groups", 0, "delivery", "source", "github").delete("revision")
+    manifest = OPSd::Manifest.new(data)
+
+    manifest.validate!
+
+    assert_equal(
+      {
+        "repository_url" => "https://github.com/acme/platform.git",
+        "revision" => "main",
+        "environment_path" => "environments/production"
+      },
+      manifest.gitops_repository
+    )
+  end
+
+  def test_v2_rejects_gitops_repository_url_with_embedded_credentials
+    data = kubernetes_manifest
+    data.dig("spec", "compute_groups", 0, "delivery", "source", "github")["repository_url"] = "https://user:token@github.com/acme/platform.git"
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.compute_groups[0].delivery.source.github.repository_url must be a valid HTTPS or SSH URL without embedded credentials"
+  end
+
+  def test_v2_rejects_gitops_environment_path_traversal
+    data = kubernetes_manifest
+    data.dig("spec", "compute_groups", 0, "delivery", "source", "github")["environment_path"] = "environments/../../secrets"
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.compute_groups[0].delivery.source.github.environment_path must be a safe relative path"
   end
 
   def test_v2_rejects_unknown_kubernetes_layer
@@ -750,6 +786,10 @@ class ManifestValidationTest < Minitest::Test
   end
 
   private
+
+  def kubernetes_manifest
+    YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+  end
 
   def base_v2_manifest
     {

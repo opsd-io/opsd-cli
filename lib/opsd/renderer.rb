@@ -115,6 +115,7 @@ module OPSd
         "apiVersion" => "opsd.io/layers/v1alpha1",
         "kind" => "LayerPlan",
         "status" => "planned",
+        **manifest.kubernetes_layer_plan_data,
         "layers" => layers
       }
       output_path.join("opsd.layers.yaml").write(YAML.dump(plan))

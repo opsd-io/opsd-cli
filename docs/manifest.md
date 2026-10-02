@@ -266,13 +266,40 @@ Reserved IP is added automatically when the bastion is enabled. Configuration
 verification warns when the firewall is disabled or when a `/0` source exposes
 the Kubernetes API to unrestricted public access.
 
+### Client GitOps repository
+
+Kubernetes cluster delivery can identify the client-owned repository that Argo
+CD will reconcile. The renderer writes only these non-secret source fields to
+`opsd.layers.yaml`; repository credentials must be supplied separately during
+bootstrap and must not be embedded in the URL or manifest.
+
+```yaml
+spec:
+  compute_groups:
+    - id: primary
+      type: cluster
+      delivery:
+        mode: gitops
+        source:
+          mode: github
+          github:
+            repository_url: https://github.com/acme/platform.git
+            revision: main # Defaults to main when omitted.
+            environment_path: environments/production
+```
+
+`repository_url` must be an HTTPS or SSH URL without embedded credentials.
+`environment_path` is a relative path within the repository; `..` segments are
+not allowed. The revision may name a branch, tag, or commit.
+
 When the bastion is enabled, rendering also produces `bastion-access.md` with
 operator examples for direct SSH access, Kubernetes API tunnels, private
 database tunnels, and a reusable `~/.ssh/config` alias. The generated guide
 keeps kubeconfig and database credentials on the operator workstation.
 
-The current renderer materializes the ordered layer plan and placeholders. The
-Helm/GitOps module outputs are added in their respective implementation stages.
+The current renderer materializes the ordered layer plan, selected GitOps
+repository and placeholders. Argo CD Application resources are added in their
+respective implementation stages.
 
 #### Layer components
 
