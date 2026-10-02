@@ -5,6 +5,7 @@ require "fileutils"
 require "yaml"
 require "erb"
 require "json"
+require "shellwords"
 
 require_relative "composer_store"
 require_relative "render_provider_catalog"
@@ -133,11 +134,39 @@ module OPSd
     def layer_readme(layer, gitops_repository:)
       generated_bootstrap = layer.fetch("id") == "bootstrap" && gitops_repository
       next_step = if generated_bootstrap
+                    bootstrap_manifest_path = Shellwords.escape(
+                      File.join(gitops_repository.fetch("environment_path"), "layers", "00-bootstrap", "argocd")
+                    )
                     <<~DETAIL
 
                       Argo CD self-management resources are generated under `layers/00-bootstrap/argocd/`.
                       Commit this subtree beneath `#{gitops_repository.fetch("environment_path")}` in the
-                      client repository so the root Application can reconcile it.
+                      client repository so the root Application can reconcile it. The root Application
+                      creates one automated Application per canonical layer; sync waves follow the
+                      layer order (`00`, `10`, `20`, `30`, `40`).
+
+                      ## Private Argo CD access
+
+                      Seed the bootstrap project and root Application once, after committing the
+                      generated subtree to the configured client repository:
+
+                      ```sh
+                      kubectl --context YOUR_CONTEXT apply -f #{bootstrap_manifest_path}/projects/bootstrap.yaml
+                      kubectl --context YOUR_CONTEXT apply -f #{bootstrap_manifest_path}/root-application.yaml
+                      ```
+
+                      Argo CD is accessed through Kubernetes API port-forwarding; it is not exposed
+                      publicly. From a workstation with a configured cluster context, run:
+
+                      ```sh
+                      kubectl --context YOUR_CONTEXT -n argocd port-forward svc/argocd-server 8080:443
+                      ```
+
+                      Then open `https://localhost:8080`. If the cluster API is reachable only through
+                      the bastion, first establish the API tunnel described in `bastion-access.md`, then
+                      run `kubectl port-forward` locally using the context configured for that tunnel.
+                      Keep kubeconfig and Kubernetes credentials on the workstation; do not copy them
+                      to the bastion.
                     DETAIL
                   else
                     "\nThis layer is planned in `opsd.layers.yaml` but is not generated yet.\n"
@@ -162,8 +191,11 @@ module OPSd
         project = argocd_project(layer, gitops_repository.fetch("repository_url"))
         filename = "#{layer.fetch('id')}.yaml"
         projects_path.join(filename).write(YAML.dump(project))
-        "projects/#{filename}"
+        application = argocd_layer_application(layer, gitops_repository)
+        bootstrap_path.join("applications").mkpath
+        bootstrap_path.join("applications", filename).write(YAML.dump(application))
       end
+      bootstrap_path.join("argocd-cm.yaml").write(YAML.dump(argocd_application_health_config))
 
       root_application = {
         "apiVersion" => "argoproj.io/v1alpha1",
@@ -181,7 +213,7 @@ module OPSd
           "source" => {
             "repoURL" => gitops_repository.fetch("repository_url"),
             "targetRevision" => gitops_repository.fetch("revision"),
-            "path" => gitops_repository.fetch("environment_path"),
+            "path" => File.join(gitops_repository.fetch("environment_path"), "layers", "00-bootstrap", "argocd"),
             "directory" => { "recurse" => true }
           },
           "destination" => {
@@ -197,6 +229,80 @@ module OPSd
         }
       }
       bootstrap_path.join("root-application.yaml").write(YAML.dump(root_application))
+    end
+
+    def argocd_layer_application(layer, gitops_repository)
+      id = layer.fetch("id")
+      directory = layer.fetch("directory")
+      source = {
+        "repoURL" => gitops_repository.fetch("repository_url"),
+        "targetRevision" => gitops_repository.fetch("revision"),
+        "path" => File.join(gitops_repository.fetch("environment_path"), "layers", directory),
+        "directory" => { "recurse" => true }
+      }
+      # Keep bootstrap's AppProjects and child Applications owned by the root app.
+      source.fetch("directory")["exclude"] = "argocd/**" if id == "bootstrap"
+
+      {
+        "apiVersion" => "argoproj.io/v1alpha1",
+        "kind" => "Application",
+        "metadata" => {
+          "name" => "opsd-#{id}",
+          "namespace" => "argocd",
+          "labels" => {
+            "app.kubernetes.io/managed-by" => "opsd",
+            "opsd.io/layer" => id
+          },
+          "annotations" => {
+            "argocd.argoproj.io/sync-wave" => layer.fetch("order").to_s
+          }
+        },
+        "spec" => {
+          "project" => id,
+          "source" => source,
+          "destination" => {
+            "server" => "https://kubernetes.default.svc",
+            "namespace" => "argocd"
+          },
+          "syncPolicy" => {
+            "automated" => {
+              "prune" => true,
+              "selfHeal" => true
+            }
+          }
+        }
+      }
+    end
+
+    def argocd_application_health_config
+      {
+        "apiVersion" => "v1",
+        "kind" => "ConfigMap",
+        "metadata" => {
+          "name" => "argocd-cm",
+          "namespace" => "argocd",
+          "annotations" => { "argocd.argoproj.io/sync-wave" => "-1" },
+          "labels" => {
+            "app.kubernetes.io/name" => "argocd-cm",
+            "app.kubernetes.io/part-of" => "argocd",
+            "app.kubernetes.io/managed-by" => "opsd"
+          }
+        },
+        "data" => {
+          "resource.customizations.health.argoproj.io_Application" => <<~LUA
+            hs = {}
+            hs.status = "Progressing"
+            hs.message = ""
+            if obj.status ~= nil and obj.status.health ~= nil then
+              hs.status = obj.status.health.status
+              if obj.status.health.message ~= nil then
+                hs.message = obj.status.health.message
+              end
+            end
+            return hs
+          LUA
+        }
+      }
     end
 
     def argocd_project(layer, repository_url)
