@@ -10,7 +10,12 @@ permissions:
 jobs:
   release-integration:
     name: release-integration / qualified
-    if: ${{ !startsWith(github.event.pull_request.head.ref, 'release-please--') }}
+    # Run the expensive DigitalOcean qualification only for Release Please PRs.
+    # Regular PRs still receive a successful skipped required check.
+    if: ${{ startsWith(github.event.pull_request.head.ref, 'release-please--') }}
+    # This job waits for the private workflow, whose jobs use the single
+    # self-hosted runner. Keep the polling job off that runner to avoid a
+    # queue deadlock.
     runs-on: ubuntu-latest
     timeout-minutes: 100
     steps:
@@ -30,6 +35,7 @@ jobs:
           REQUEST_ID: ${{ github.repository }}-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.event.pull_request.head.sha }}
           RELEASE_TITLE: ${{ github.event.pull_request.title }}
         run: |
+          dispatched_at="$(date -u +%s)"
           gh api --method POST \
             repos/opsd-io/private-workflows/actions/workflows/opsd-private-integration.yml/dispatches \
             -f ref=main \
@@ -45,17 +51,19 @@ jobs:
             -f "inputs[release-integration]=true" \
             -f "inputs[release-component]=cli"
           echo "request-id=${REQUEST_ID}" >> "${GITHUB_OUTPUT}"
+          echo "dispatched-at=${dispatched_at}" >> "${GITHUB_OUTPUT}"
 
       - name: Wait for private qualification
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REQUEST_ID: ${{ steps.dispatch.outputs.request-id }}
+          DISPATCHED_AT: ${{ steps.dispatch.outputs.dispatched-at }}
         run: |
           for attempt in $(seq 1 360); do
             echo "Waiting for private qualification (attempt ${attempt}/360)."
             run_id="$(gh api 'repos/opsd-io/private-workflows/actions/runs?event=workflow_dispatch&branch=main&per_page=50' \
-              | jq -r --arg request "Release qualification ${REQUEST_ID}" \
-                '.workflow_runs[] | select(.display_title == $request) | .id' | head -n 1)"
+              | jq -r --arg request "Release qualification ${REQUEST_ID}" --argjson dispatched_at "${DISPATCHED_AT}" \
+                '[.workflow_runs[] | select(.display_title == $request and ((.created_at | fromdateiso8601) >= $dispatched_at))] | sort_by(.created_at) | last | .id // empty')"
             if [[ -n "${run_id}" ]]; then
               status="$(gh api "repos/opsd-io/private-workflows/actions/runs/${run_id}" --jq '.status')"
               conclusion="$(gh api "repos/opsd-io/private-workflows/actions/runs/${run_id}" --jq '.conclusion // empty')"
