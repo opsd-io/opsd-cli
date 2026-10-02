@@ -89,9 +89,22 @@ class KubernetesFoundationTest < Minitest::Test
       assert_equal "bootstrap", root_application.dig("spec", "project")
       assert_equal "https://github.com/customer/platform.git", root_application.dig("spec", "source", "repoURL")
       assert_equal "release/production", root_application.dig("spec", "source", "targetRevision")
-      assert_equal "clusters/production", root_application.dig("spec", "source", "path")
+      assert_equal "clusters/production/layers/00-bootstrap/argocd", root_application.dig("spec", "source", "path")
       assert_equal true, root_application.dig("spec", "source", "directory", "recurse")
       assert_equal({ "prune" => true, "selfHeal" => true }, root_application.dig("spec", "syncPolicy", "automated"))
+
+      layer_applications = Dir.glob(File.join(bootstrap_root, "applications", "*.yaml")).map { |path| YAML.load_file(path) }
+      assert_equal %w[applications bootstrap infrastructure monitoring tools], layer_applications.map { |application| application.dig("metadata", "name").delete_prefix("opsd-") }.sort
+      assert_equal ["0", "10", "20", "30", "40"], layer_applications.sort_by { |application| application.dig("metadata", "annotations", "argocd.argoproj.io/sync-wave").to_i }.map { |application| application.dig("metadata", "annotations", "argocd.argoproj.io/sync-wave") }
+      assert layer_applications.all? { |application| application.dig("spec", "syncPolicy", "automated", "prune") }
+      bootstrap_application = layer_applications.find { |application| application.dig("metadata", "name") == "opsd-bootstrap" }
+      assert_equal "clusters/production/layers/00-bootstrap", bootstrap_application.dig("spec", "source", "path")
+      assert_equal "argocd/**", bootstrap_application.dig("spec", "source", "directory", "exclude")
+      assert_equal "clusters/production/layers/40-applications", layer_applications.find { |application| application.dig("metadata", "name") == "opsd-applications" }.dig("spec", "source", "path")
+      argocd_config = YAML.load_file(File.join(bootstrap_root, "argocd-cm.yaml"))
+      assert_equal "ConfigMap", argocd_config.fetch("kind")
+      assert_equal "-1", argocd_config.dig("metadata", "annotations", "argocd.argoproj.io/sync-wave")
+      assert_includes argocd_config.dig("data", "resource.customizations.health.argoproj.io_Application"), "obj.status.health.status"
 
       projects = Dir.glob(File.join(bootstrap_root, "projects", "*.yaml")).map { |path| YAML.load_file(path) }
       assert_equal %w[applications bootstrap infrastructure monitoring tools], projects.map { |project| project.dig("metadata", "name") }.sort
@@ -108,6 +121,9 @@ class KubernetesFoundationTest < Minitest::Test
       assert File.file?(File.join(output_path, "layers", "10-infrastructure", "README.md"))
       assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "root app-of-apps"
       assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "client repository"
+      assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "kubectl port-forward"
+      assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "bastion"
+      assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "clusters/production/layers/00-bootstrap/argocd/projects/bootstrap.yaml"
     end
   end
 

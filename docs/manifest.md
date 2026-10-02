@@ -292,15 +292,31 @@ spec:
 `environment_path` is a relative path within the repository; `..` segments are
 not allowed. The revision may name a branch, tag, or commit.
 
-When these GitOps fields are present, rendering creates
-`layers/00-bootstrap/argocd/root-application.yaml` and one AppProject manifest
-per canonical layer in `layers/00-bootstrap/argocd/projects/`. The root
-Application watches `environment_path` recursively and self-heals and prunes
-changes. Commit the generated `layers/00-bootstrap/argocd/` subtree beneath
-that path in the client repository; it includes the root Application and
-AppProjects that the root Application will manage. The bootstrap AppProject is
-limited to the `argocd` namespace and AppProject creation; platform-layer
-projects can deploy cluster-scoped resources from the selected client repo.
+When these GitOps fields are present, rendering creates the root Application,
+one AppProject per canonical layer, and one layer Application per canonical
+layer. Commit the generated `layers/00-bootstrap/argocd/` subtree beneath
+`environment_path` in the client repository. The root Application watches that
+Argo CD configuration subtree recursively, then manages the AppProjects and
+layer Applications. Each layer Application watches its corresponding
+`layers/<NN-name>` directory and enables automated sync, pruning and
+self-healing. Its `argocd.argoproj.io/sync-wave` annotation uses the canonical
+layer order (`0`, `10`, `20`, `30`, `40`), making the order explicit and stable
+in Argo CD. The bootstrap configuration also restores Argo CD's Application
+health assessment, so parent sync waves wait for each child Application to
+become healthy before advancing. The bootstrap layer Application excludes the
+`argocd/` subtree so the root Application remains its sole owner.
+
+For the initial hand-off, apply the generated `projects/bootstrap.yaml` and
+`root-application.yaml` once with the configured Kubernetes context. The root
+Application then reconciles the remaining Argo CD configuration from the
+client repository.
+
+The bootstrap AppProject is limited to the `argocd` namespace and AppProject
+creation; platform-layer projects can deploy cluster-scoped resources from the
+selected client repo. Argo CD remains private: use `kubectl port-forward` to
+reach its service from a workstation. When the Kubernetes API is only reachable
+through the bastion, establish the documented API tunnel first and run
+port-forwarding locally. Kubernetes credentials stay on the workstation.
 
 Older manifests using `repository: owner/repo` and `branch` remain accepted;
 they resolve to the GitHub HTTPS URL and default to the repository root (`.`).
@@ -312,9 +328,9 @@ operator examples for direct SSH access, Kubernetes API tunnels, private
 database tunnels, and a reusable `~/.ssh/config` alias. The generated guide
 keeps kubeconfig and database credentials on the operator workstation.
 
-The current renderer materializes the ordered layer plan, selected GitOps
-repository and placeholders. Argo CD Application resources are added in their
-respective implementation stages.
+The renderer materializes the ordered layer plan, selected GitOps repository,
+Argo CD resources and layer placeholders. Later implementation stages add
+provider and module resources to their corresponding layer directories.
 
 #### Layer components
 
