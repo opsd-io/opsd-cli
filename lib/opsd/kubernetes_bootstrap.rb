@@ -4,6 +4,8 @@ require "digest"
 require "open3"
 require "pathname"
 require "tmpdir"
+require "uri"
+require "yaml"
 
 require_relative "kubernetes_module"
 
@@ -15,13 +17,19 @@ module OPSd
     ARGOCD_NAMESPACE = "argocd"
     CLUSTER_TIMEOUT_SECONDS = 600
     POLL_INTERVAL_SECONDS = 5
+    GITOPS_CREDENTIAL_ENV_KEYS = %w[
+      OPSD_ARGOCD_REPO_USERNAME
+      OPSD_ARGOCD_REPO_PASSWORD
+      OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY
+    ].freeze
 
     def initialize(stdout: $stdout, env: ENV)
       @stdout = stdout
       @env = env
     end
 
-    def run
+    def run(gitops_repository: nil)
+      repository_secret = build_gitops_repository_secret(gitops_repository)
       ensure_dependencies!
       Dir.mktmpdir("opsd-bootstrap-") do |directory|
         @stdout.puts "Resolving the Argo CD module from modules-kubernetes..."
@@ -34,6 +42,7 @@ module OPSd
 
         @stdout.puts "Installing Argo CD chart..."
         install_chart(archive, defaults_path)
+        apply_gitops_repository_secret(repository_secret) if repository_secret
         @stdout.puts "Argo CD is ready in namespace #{ARGOCD_NAMESPACE}."
       end
     end
@@ -200,8 +209,78 @@ module OPSd
       @stdout.print(stdout) unless stdout.empty?
     end
 
-    def capture(*command)
-      Open3.capture3(*command)
+    def build_gitops_repository_secret(repository)
+      credential_values = %w[
+        OPSD_ARGOCD_REPO_USERNAME
+        OPSD_ARGOCD_REPO_PASSWORD
+        OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY
+      ].to_h { |name| [name, @env[name]] }
+      username = credential_values.fetch("OPSD_ARGOCD_REPO_USERNAME")
+      password = credential_values.fetch("OPSD_ARGOCD_REPO_PASSWORD")
+      private_key = credential_values.fetch("OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY")
+      username = nil if username&.empty?
+      password = nil if password&.empty?
+      private_key = nil if private_key&.strip&.empty?
+
+      if repository.nil?
+        raise "Pass --manifest with a GitOps repository when Argo CD repository credentials are set." if [username, password, private_key].any?
+
+        return nil
+      end
+
+      if username.nil? != password.nil?
+        raise "Set both OPSD_ARGOCD_REPO_USERNAME and OPSD_ARGOCD_REPO_PASSWORD for HTTPS Git authentication."
+      end
+      if private_key && (username || password)
+        raise "Choose either HTTPS Git credentials or OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY, not both."
+      end
+
+      repository_url = repository.fetch("repository_url")
+      scheme = URI.parse(repository_url).scheme
+      credentials = if username && password
+                     raise "HTTPS Git credentials require an https:// repository URL." unless scheme == "https"
+
+                     { "username" => username, "password" => password }
+                   elsif private_key
+                     raise "OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY requires an ssh:// repository URL." unless scheme == "ssh"
+
+                     { "sshPrivateKey" => private_key }
+                   else
+                     return nil
+                   end
+
+      {
+        "apiVersion" => "v1",
+        "kind" => "Secret",
+        "metadata" => {
+          "name" => "opsd-gitops-repository",
+          "namespace" => ARGOCD_NAMESPACE,
+          "labels" => { "argocd.argoproj.io/secret-type" => "repository" }
+        },
+        "stringData" => {
+          "type" => "git",
+          "url" => repository_url
+        }.merge(credentials)
+      }
+    end
+
+    def apply_gitops_repository_secret(secret)
+      _stdout, _stderr, status = capture(
+        "kubectl", "apply", "--namespace", ARGOCD_NAMESPACE, "--filename", "-",
+        stdin_data: YAML.dump(secret)
+      )
+      unless status.success?
+        # Never include command output here: kubectl diagnostics can contain applied manifest data.
+        raise "Unable to configure the Argo CD Git repository Secret (kubectl apply failed)."
+      end
+
+      @stdout.puts "Configured the Argo CD Git repository Secret."
+    end
+
+    def capture(*command, stdin_data: nil)
+      options = stdin_data.nil? ? {} : { stdin_data: stdin_data }
+      sanitized_environment = GITOPS_CREDENTIAL_ENV_KEYS.to_h { |name| [name, nil] }
+      Open3.capture3(sanitized_environment, *command, **options)
     rescue Errno::ENOENT
       raise "Required command not found: #{command.first}"
     end

@@ -52,6 +52,7 @@ module OPSd
     COMPLETION_OPTIONS = {
       resize: %w[--profile],
       scale: %w[--replicas],
+      bootstrap: %w[--manifest],
       attach: %w[--to],
       detach: %w[--from]
     }.freeze
@@ -654,14 +655,28 @@ module OPSd
       puts "  tofu init -backend=false -input=false"
       puts "  tofu plan"
       puts "  tofu apply"
-      puts "  opsd bootstrap  # optional: install Argo CD in the active Kubernetes context"
+      puts "  opsd bootstrap --manifest #{Shellwords.escape(File.expand_path(manifest_path))}  # install Argo CD and configure Git repository access"
     end
 
     def run_bootstrap
       return puts(bootstrap_usage) if help_requested?
-      raise "Usage: opsd bootstrap" unless @argv.empty?
 
-      KubernetesBootstrap.new.run
+      manifest_path = if @argv.empty?
+                        nil
+                      elsif @argv.length == 2 && @argv.first == "--manifest" && !@argv.last.to_s.empty?
+                        @argv.last
+                      else
+                        raise "Usage: opsd bootstrap [--manifest <path>]"
+                      end
+
+      gitops_repository = nil
+      if manifest_path
+        manifest = load_manifest(manifest_path)
+        manifest.validate!
+        gitops_repository = manifest.gitops_repository
+      end
+
+      KubernetesBootstrap.new.run(gitops_repository:)
     end
 
     def run_export
@@ -2809,13 +2824,14 @@ module OPSd
 
     def bootstrap_usage
       help_block(
-        "Usage: opsd bootstrap",
+        "Usage: opsd bootstrap [--manifest <path>]",
         [
           [
             "Description",
             [
-              ["Behavior", "Wait for nodes in the active kubectl context to become Ready, then install Argo CD."],
+              ["Behavior", "Wait for nodes in the active kubectl context to become Ready, install Argo CD, and optionally configure the manifest GitOps repository."],
               ["Requirements", "Requires kubectl, Helm and Git to be available in PATH."],
+              ["Repository credentials", "For HTTPS use OPSD_ARGOCD_REPO_USERNAME and OPSD_ARGOCD_REPO_PASSWORD; for SSH use OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY. Secrets are sent directly to Kubernetes and are never written to generated files."],
               ["Module source", "Reads the Argo CD module from modules-kubernetes at main by default; override with OPSD_MODULES_KUBERNETES_REF."],
               ["Repeat runs", "Safe to rerun on a bootstrapped cluster."]
             ]
