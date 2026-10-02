@@ -292,6 +292,15 @@ spec:
 `environment_path` is a relative path within the repository; `..` segments are
 not allowed. The revision may name a branch, tag, or commit.
 
+Run `opsd bootstrap --manifest <path>` after the cluster is ready. For a private
+HTTPS repository, provide `OPSD_ARGOCD_REPO_USERNAME` and
+`OPSD_ARGOCD_REPO_PASSWORD` in the shell environment; for a private SSH
+repository, provide `OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY`. Set only the credential
+type matching the repository URL. OPSd sends the credential as standard input
+to `kubectl apply` and creates the Argo CD repository Secret in the `argocd`
+namespace. The secret is not written to the manifest, generated output, or a
+local temporary file. Public repositories need no credential variables.
+
 When these GitOps fields are present, rendering creates the root Application,
 one AppProject per canonical layer, and one layer Application per canonical
 layer. Commit the generated `layers/00-bootstrap/argocd/` subtree beneath

@@ -15,13 +15,14 @@ class KubernetesBootstrapTest < Minitest::Test
       end
     end
 
-    attr_reader :commands
+    attr_reader :commands, :stdin_payloads
 
     def initialize(repository:, chart_content:, stdout: StringIO.new, env: {})
       super(stdout: stdout, env: env)
       @repository = repository
       @chart_content = chart_content
       @commands = []
+      @stdin_payloads = []
     end
 
     private
@@ -30,8 +31,9 @@ class KubernetesBootstrapTest < Minitest::Test
       nil
     end
 
-    def capture(*command)
+    def capture(*command, stdin_data: nil)
       @commands << command
+      @stdin_payloads << stdin_data unless stdin_data.nil?
 
       case command
       when ["kubectl", "config", "current-context"]
@@ -74,6 +76,91 @@ class KubernetesBootstrapTest < Minitest::Test
       assert install_commands.all? { |command| command.include?("--install") }
       assert install_commands.all? { |command| command.include?("--namespace") && command[command.index("--namespace") + 1] == "argocd" }
       assert_equal 2, bootstrap.commands.count { |command| command[0..2] == %w[kubectl wait --for=condition=Ready] }
+      refute bootstrap.commands.any? { |command| command[0..1] == %w[kubectl apply] }
+    end
+  end
+
+  def test_creates_https_repository_secret_from_environment_without_putting_credentials_in_arguments
+    Dir.mktmpdir("opsd-bootstrap-test-") do |directory|
+      repository = write_module_repository(directory, chart_content: "fake pinned chart archive")
+      stdout = StringIO.new
+      bootstrap = FakeBootstrap.new(
+        repository: repository,
+        chart_content: "fake pinned chart archive",
+        stdout: stdout,
+        env: {
+          "OPSD_ARGOCD_REPO_USERNAME" => "x-access-token",
+          "OPSD_ARGOCD_REPO_PASSWORD" => "private-token-value"
+        }
+      )
+
+      bootstrap.run(gitops_repository: { "repository_url" => "https://github.com/acme/platform.git" })
+
+      secret_command = bootstrap.commands.find { |command| command[0..1] == %w[kubectl apply] }
+      assert_equal %w[kubectl apply --namespace argocd --filename -], secret_command
+      secret = YAML.safe_load(bootstrap.stdin_payloads.fetch(0))
+      assert_equal "Secret", secret.fetch("kind")
+      assert_equal "repository", secret.dig("metadata", "labels", "argocd.argoproj.io/secret-type")
+      assert_equal "https://github.com/acme/platform.git", secret.dig("stringData", "url")
+      assert_equal "x-access-token", secret.dig("stringData", "username")
+      assert_equal "private-token-value", secret.dig("stringData", "password")
+      refute_includes bootstrap.commands.flatten.join(" "), "private-token-value"
+      refute_includes stdout.string, "private-token-value"
+    end
+  end
+
+  def test_creates_ssh_repository_secret
+    Dir.mktmpdir("opsd-bootstrap-test-") do |directory|
+      repository = write_module_repository(directory, chart_content: "fake pinned chart archive")
+      private_key = "-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-key-value\n-----END OPENSSH PRIVATE KEY-----\n"
+      bootstrap = FakeBootstrap.new(
+        repository: repository,
+        chart_content: "fake pinned chart archive",
+        env: { "OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY" => private_key }
+      )
+
+      bootstrap.run(gitops_repository: { "repository_url" => "ssh://git@github.com/acme/platform.git" })
+
+      secret = YAML.safe_load(bootstrap.stdin_payloads.fetch(0))
+      assert_equal private_key, secret.dig("stringData", "sshPrivateKey")
+      refute secret.dig("stringData").key?("password")
+    end
+  end
+
+  def test_rejects_mismatched_repository_credentials_before_cluster_operations
+    Dir.mktmpdir("opsd-bootstrap-test-") do |directory|
+      repository = write_module_repository(directory, chart_content: "fake pinned chart archive")
+      bootstrap = FakeBootstrap.new(
+        repository: repository,
+        chart_content: "fake pinned chart archive",
+        env: { "OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY" => "private-key-value" }
+      )
+
+      error = assert_raises(RuntimeError) do
+        bootstrap.run(gitops_repository: { "repository_url" => "https://github.com/acme/platform.git" })
+      end
+
+      assert_includes error.message, "requires an ssh:// repository URL"
+      assert_empty bootstrap.commands
+    end
+  end
+
+  def test_requires_a_gitops_manifest_when_credentials_are_configured
+    Dir.mktmpdir("opsd-bootstrap-test-") do |directory|
+      repository = write_module_repository(directory, chart_content: "fake pinned chart archive")
+      bootstrap = FakeBootstrap.new(
+        repository: repository,
+        chart_content: "fake pinned chart archive",
+        env: {
+          "OPSD_ARGOCD_REPO_USERNAME" => "x-access-token",
+          "OPSD_ARGOCD_REPO_PASSWORD" => "private-token-value"
+        }
+      )
+
+      error = assert_raises(RuntimeError) { bootstrap.run }
+
+      assert_includes error.message, "Pass --manifest with a GitOps repository"
+      assert_empty bootstrap.commands
     end
   end
 
@@ -94,6 +181,24 @@ class KubernetesBootstrapTest < Minitest::Test
 
     assert_includes stdout, "Usage: opsd bootstrap"
     assert_includes stdout, "Requires kubectl, Helm and Git"
+    assert_includes stdout, "OPSD_ARGOCD_REPO_USERNAME"
+    assert_includes stdout, "OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY"
+  end
+
+  def test_bootstrap_reads_gitops_repository_from_manifest
+    manifest_path = File.expand_path("../examples/kubernetes-environment.yaml", __dir__)
+    manifest = OPSd::Manifest.new(YAML.load_file(manifest_path))
+    captured_repositories = []
+    bootstrap = Object.new
+    bootstrap.define_singleton_method(:run) do |gitops_repository:|
+      captured_repositories << gitops_repository
+    end
+
+    OPSd::KubernetesBootstrap.stub(:new, bootstrap) do
+      capture_io { OPSd::CLI.new(["bootstrap", "--manifest", manifest_path]).run }
+    end
+
+    assert_equal manifest.gitops_repository, captured_repositories.fetch(0)
   end
 
   private
