@@ -113,6 +113,10 @@ class KubernetesFoundationTest < Minitest::Test
       handoff = File.read(File.join(output_path, "bastion-access.md"))
       assert_includes handoff, "does not receive a kubeconfig"
       assert_includes handoff, "Platform team"
+      assert_includes handoff, "tls-server-name"
+      assert_includes handoff, "PRIVATE_POSTGRES_HOST"
+      assert_includes handoff, "Host opsd-bastion"
+      assert_includes handoff, "ExitOnForwardFailure yes"
     end
   end
 
