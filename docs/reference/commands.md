@@ -23,6 +23,7 @@ Completion already covers the discoverable command and flag names, so this page 
 - `validate` checks a manifest without rendering infrastructure.
 - `verify` checks a manifest, plan, or lifecycle snapshot against OPSd rules.
 - `render` generates the final OpenTofu handoff from a valid manifest.
+- `bootstrap` waits for the active Kubernetes context to be ready, then installs the pinned Argo CD chart described by the `modules-kubernetes` module. It requires `kubectl`, Helm and Git in `PATH`, and can be rerun. The module source defaults to `main`; set `OPSD_MODULES_KUBERNETES_REF` to use another branch, tag or commit.
 - `export` packages a rendered handoff into a portable exit pack.
 
 ## Mutations
