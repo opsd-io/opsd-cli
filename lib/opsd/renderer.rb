@@ -191,11 +191,32 @@ module OPSd
         ssh -N -L 6443:${CLUSTER_HOST}:443 #{user}@${BASTION_IP}
         ```
 
-        Keep the kubeconfig on the operator workstation and configure its API
-        server as `https://127.0.0.1:6443` for the duration of the tunnel.
+        Keep the kubeconfig on the operator workstation, configure its API
+        server as `https://127.0.0.1:6443`, and set `tls-server-name` to
+        `${CLUSTER_HOST}` for the duration of the tunnel.
 
-        For other SSH-reachable private hosts, configure a bastion alias and
-        use `ProxyJump`:
+        ## Database tunnels
+
+        Forward private database endpoints through the bastion. Replace the
+        placeholders with the private endpoint and credentials for the target
+        service:
+
+        ```sh
+        # PostgreSQL
+        ssh -N -L 15432:PRIVATE_POSTGRES_HOST:5432 #{user}@${BASTION_IP}
+        psql "postgresql://DB_USER@127.0.0.1:15432/DB_NAME"
+
+        # MySQL
+        ssh -N -L 13306:PRIVATE_MYSQL_HOST:3306 #{user}@${BASTION_IP}
+        mysql --host=127.0.0.1 --port=13306 --user=DB_USER DB_NAME
+        ```
+
+        The private database hostname must resolve from the bastion's VPC.
+        Database credentials are not stored on the bastion.
+
+        ## Reusable SSH configuration
+
+        Add a bastion alias to `~/.ssh/config`:
 
         ```sshconfig
         Host opsd-bastion
@@ -203,7 +224,23 @@ module OPSd
             User #{user}
             IdentityFile ~/.ssh/platform_ed25519
             IdentitiesOnly yes
+            ExitOnForwardFailure yes
+            ServerAliveInterval 60
+        ```
 
+        Then invoke the tunnels using the alias:
+
+        ```sh
+        ssh -N -L 6443:CLUSTER_API_HOST:443 opsd-bastion
+        ssh -N -L 15432:PRIVATE_POSTGRES_HOST:5432 opsd-bastion
+        ```
+
+        The SSH firewall must allow the operator's source CIDR, and the DOKS
+        control-plane firewall must allow the bastion Reserved IP.
+
+        For other SSH-reachable private hosts, add a `ProxyJump` host:
+
+        ```sshconfig
         Host private-host
             HostName <PRIVATE_HOST>
             User <REMOTE_USER>

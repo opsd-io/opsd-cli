@@ -266,6 +266,11 @@ Reserved IP is added automatically when the bastion is enabled. Configuration
 verification warns when the firewall is disabled or when a `/0` source exposes
 the Kubernetes API to unrestricted public access.
 
+When the bastion is enabled, rendering also produces `bastion-access.md` with
+operator examples for direct SSH access, Kubernetes API tunnels, private
+database tunnels, and a reusable `~/.ssh/config` alias. The generated guide
+keeps kubeconfig and database credentials on the operator workstation.
+
 The current renderer materializes the ordered layer plan and placeholders. The
 Helm/GitOps module outputs are added in their respective implementation stages.
 
