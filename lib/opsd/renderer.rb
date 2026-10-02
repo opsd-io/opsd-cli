@@ -160,6 +160,30 @@ module OPSd
         CLUSTER_HOST="$(tofu output -raw cluster_endpoint | sed -E 's#^https?://##; s#/$##')"
         ```
 
+        ## Third-party SSH access
+
+        To grant a third party access, add their **public** key to
+        `spec.layers.infrastructure.components.bastion.values.authorized_keys`
+        in the OPSd manifest and set a description that identifies its owner.
+        Public keys can be reviewed and stored with the configuration. The
+        third party keeps their private key on their own workstation; never
+        send it to the operator or store it in the manifest, repository, or
+        bastion.
+
+        The key is installed for the configured bastion SSH user. It does not
+        create a separate Linux account. Add the third party's source IP range
+        to `ssh_allow_cidrs` as well, or the SSH firewall will reject the
+        connection. They can connect with their own private key:
+
+        ```sh
+        ssh -i ~/.ssh/third_party_ed25519 #{user}@${BASTION_IP}
+        ```
+
+        For Kubernetes API access, keep kubeconfig on the workstation and use
+        the local tunnel described below. To revoke access, remove the public
+        key from the manifest and apply the updated configuration. This blocks
+        new logins with that key; terminate any existing SSH session separately.
+
         Use a local tunnel when the Kubernetes API must be reached through the
         bastion:
 
@@ -169,6 +193,25 @@ module OPSd
 
         Keep the kubeconfig on the operator workstation and configure its API
         server as `https://127.0.0.1:6443` for the duration of the tunnel.
+
+        For other SSH-reachable private hosts, configure a bastion alias and
+        use `ProxyJump`:
+
+        ```sshconfig
+        Host opsd-bastion
+            HostName <BASTION_IP>
+            User #{user}
+            IdentityFile ~/.ssh/platform_ed25519
+            IdentitiesOnly yes
+
+        Host private-host
+            HostName <PRIVATE_HOST>
+            User <REMOTE_USER>
+            ProxyJump opsd-bastion
+        ```
+
+        Then connect with `ssh private-host`. The private host's SSH key stays
+        on the workstation; the bastion does not receive it.
       MARKDOWN
     end
 

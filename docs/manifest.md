@@ -249,8 +249,16 @@ spec:
 Disabling the component removes the bastion and its Reserved IP. Kubernetes
 credentials are not installed on the bastion; access is expected to use a
 local SSH tunnel or `ProxyJump`. The module provisions and hardens the SSH
-server, disables root and password authentication, and stores operator keys
+server, disables root and password authentication, and stores authorized keys
 under `/etc/ssh/authorized_keys/<user>` instead of the user's home directory.
+To grant a third party SSH access, add their public key to
+`values.authorized_keys` with a description, review and commit the manifest
+change, and allow their source range in `ssh_allow_cidrs`. The private key
+stays with its owner and must not be added to the manifest, repository, or
+bastion. All configured keys authenticate as the configured bastion user; they
+do not create separate Linux accounts. Revoke access by removing the public key
+and applying the updated configuration. Existing SSH sessions must be ended
+separately.
 
 For a Kubernetes foundation, the control-plane firewall is enabled when the
 bastion is enabled or when `control_plane_cidrs` is configured. The bastion's
