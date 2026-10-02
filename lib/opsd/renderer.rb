@@ -108,6 +108,7 @@ module OPSd
 
     def generate_layer_plan(output_path, manifest)
       layers = manifest.kubernetes_layer_plan
+      gitops_repository = manifest.gitops_repository
       layer_root = output_path.join("layers")
       layer_root.mkpath
 
@@ -123,16 +124,112 @@ module OPSd
       layers.each do |layer|
         layer_path = layer_root.join(layer.fetch("directory"))
         layer_path.mkpath
-        layer_path.join("README.md").write(<<~README)
-          # #{layer.fetch("name")}
-
-          #{layer.fetch("description")}
-
-          Status: #{layer.fetch("enabled") ? "enabled" : "disabled"}.
-
-          This layer is planned in `opsd.layers.yaml` but is not generated yet.
-        README
+        layer_path.join("README.md").write(layer_readme(layer, gitops_repository:))
       end
+
+      generate_argocd_bootstrap(output_path, manifest, gitops_repository:) if gitops_repository
+    end
+
+    def layer_readme(layer, gitops_repository:)
+      generated_bootstrap = layer.fetch("id") == "bootstrap" && gitops_repository
+      next_step = if generated_bootstrap
+                    <<~DETAIL
+
+                      Argo CD self-management resources are generated under `layers/00-bootstrap/argocd/`.
+                      Commit this subtree beneath `#{gitops_repository.fetch("environment_path")}` in the
+                      client repository so the root Application can reconcile it.
+                    DETAIL
+                  else
+                    "\nThis layer is planned in `opsd.layers.yaml` but is not generated yet.\n"
+                  end
+
+      <<~README
+        # #{layer.fetch("name")}
+
+        #{layer.fetch("description")}
+
+        Status: #{layer.fetch("enabled") ? "enabled" : "disabled"}.
+        #{next_step}
+      README
+    end
+
+    def generate_argocd_bootstrap(output_path, manifest, gitops_repository:)
+      bootstrap_path = output_path.join("layers", "00-bootstrap", "argocd")
+      projects_path = bootstrap_path.join("projects")
+      projects_path.mkpath
+
+      manifest.kubernetes_layer_plan.each do |layer|
+        project = argocd_project(layer, gitops_repository.fetch("repository_url"))
+        filename = "#{layer.fetch('id')}.yaml"
+        projects_path.join(filename).write(YAML.dump(project))
+        "projects/#{filename}"
+      end
+
+      root_application = {
+        "apiVersion" => "argoproj.io/v1alpha1",
+        "kind" => "Application",
+        "metadata" => {
+          "name" => "opsd-root",
+          "namespace" => "argocd",
+          "labels" => {
+            "app.kubernetes.io/managed-by" => "opsd",
+            "opsd.io/layer" => "bootstrap"
+          }
+        },
+        "spec" => {
+          "project" => "bootstrap",
+          "source" => {
+            "repoURL" => gitops_repository.fetch("repository_url"),
+            "targetRevision" => gitops_repository.fetch("revision"),
+            "path" => gitops_repository.fetch("environment_path"),
+            "directory" => { "recurse" => true }
+          },
+          "destination" => {
+            "server" => "https://kubernetes.default.svc",
+            "namespace" => "argocd"
+          },
+          "syncPolicy" => {
+            "automated" => {
+              "prune" => true,
+              "selfHeal" => true
+            }
+          }
+        }
+      }
+      bootstrap_path.join("root-application.yaml").write(YAML.dump(root_application))
+    end
+
+    def argocd_project(layer, repository_url)
+      bootstrap = layer.fetch("id") == "bootstrap"
+      project = {
+        "apiVersion" => "argoproj.io/v1alpha1",
+        "kind" => "AppProject",
+        "metadata" => {
+          "name" => layer.fetch("id"),
+          "namespace" => "argocd",
+          "labels" => {
+            "app.kubernetes.io/managed-by" => "opsd",
+            "opsd.io/layer" => layer.fetch("id")
+          }
+        },
+        "spec" => {
+          "description" => layer.fetch("description"),
+          "sourceRepos" => [repository_url],
+          "destinations" => [
+            {
+              "server" => "https://kubernetes.default.svc",
+              "namespace" => bootstrap ? "argocd" : "*"
+            }
+          ]
+        }
+      }
+      if bootstrap
+        project.fetch("spec")["clusterResourceWhitelist"] = [{ "group" => "argoproj.io", "kind" => "AppProject" }]
+      else
+        # Platform layers need cluster-scoped APIs such as CRDs and cluster roles.
+        project.fetch("spec")["clusterResourceWhitelist"] = [{ "group" => "*", "kind" => "*" }]
+      end
+      project
     end
 
     def generate_bastion_handoff(output_path, manifest)

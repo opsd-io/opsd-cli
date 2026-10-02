@@ -292,6 +292,16 @@ spec:
 `environment_path` is a relative path within the repository; `..` segments are
 not allowed. The revision may name a branch, tag, or commit.
 
+When these GitOps fields are present, rendering creates
+`layers/00-bootstrap/argocd/root-application.yaml` and one AppProject manifest
+per canonical layer in `layers/00-bootstrap/argocd/projects/`. The root
+Application watches `environment_path` recursively and self-heals and prunes
+changes. Commit the generated `layers/00-bootstrap/argocd/` subtree beneath
+that path in the client repository; it includes the root Application and
+AppProjects that the root Application will manage. The bootstrap AppProject is
+limited to the `argocd` namespace and AppProject creation; platform-layer
+projects can deploy cluster-scoped resources from the selected client repo.
+
 Older manifests using `repository: owner/repo` and `branch` remain accepted;
 they resolve to the GitHub HTTPS URL and default to the repository root (`.`).
 New manifests should use the explicit URL, revision, and environment path

@@ -82,11 +82,32 @@ class KubernetesFoundationTest < Minitest::Test
         },
         plan.dig("gitops", "repository")
       )
+      bootstrap_root = File.join(output_path, "layers", "00-bootstrap", "argocd")
+      root_application = YAML.load_file(File.join(bootstrap_root, "root-application.yaml"))
+      assert_equal "Application", root_application.fetch("kind")
+      assert_equal "opsd-root", root_application.dig("metadata", "name")
+      assert_equal "bootstrap", root_application.dig("spec", "project")
+      assert_equal "https://github.com/customer/platform.git", root_application.dig("spec", "source", "repoURL")
+      assert_equal "release/production", root_application.dig("spec", "source", "targetRevision")
+      assert_equal "clusters/production", root_application.dig("spec", "source", "path")
+      assert_equal true, root_application.dig("spec", "source", "directory", "recurse")
+      assert_equal({ "prune" => true, "selfHeal" => true }, root_application.dig("spec", "syncPolicy", "automated"))
+
+      projects = Dir.glob(File.join(bootstrap_root, "projects", "*.yaml")).map { |path| YAML.load_file(path) }
+      assert_equal %w[applications bootstrap infrastructure monitoring tools], projects.map { |project| project.dig("metadata", "name") }.sort
+      assert projects.all? { |project| project.dig("spec", "sourceRepos") == ["https://github.com/customer/platform.git"] }
+      assert_equal "argocd", projects.find { |project| project.dig("metadata", "name") == "bootstrap" }.dig("spec", "destinations", 0, "namespace")
+      assert_equal [
+        { "group" => "argoproj.io", "kind" => "AppProject" }
+      ], projects.find { |project| project.dig("metadata", "name") == "bootstrap" }.dig("spec", "clusterResourceWhitelist")
+      assert_includes File.read(File.join(bootstrap_root, "root-application.yaml")), "opsd-root"
+      refute_includes Dir.glob(File.join(bootstrap_root, "**", "*.yaml")).map { |path| File.read(path) }.join("\n"), "keep-out-of-generated-files"
       assert_equal %w[bootstrap infrastructure monitoring tools applications], plan.fetch("layers").map { |layer| layer.fetch("id") }
       assert_equal [0, 10, 20, 30, 40], plan.fetch("layers").map { |layer| layer.fetch("order") }
       assert File.file?(File.join(output_path, "layers", "00-bootstrap", "README.md"))
       assert File.file?(File.join(output_path, "layers", "10-infrastructure", "README.md"))
       assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "root app-of-apps"
+      assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "client repository"
     end
   end
 
