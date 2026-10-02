@@ -341,7 +341,7 @@ module OPSd
         "profile" => values.fetch("profile"),
         "delivery" => {
           "mode" => values.fetch("delivery_mode", "gitops"),
-          "source" => delivery_source(values, fallback_mode: "github"),
+          "source" => kubernetes_gitops_source(values),
           "bootstrap" => {},
           "env" => {},
           "secret_env" => {}
@@ -433,6 +433,17 @@ module OPSd
       end
 
       source
+    end
+
+    def kubernetes_gitops_source(values)
+      {
+        "mode" => "github",
+        "github" => {
+          "repository_url" => values.fetch("gitops_repository_url", "https://github.com/acme/platform.git"),
+          "revision" => values.fetch("gitops_revision", "main"),
+          "environment_path" => values.fetch("gitops_environment_path", "environments/production")
+        }
+      }
     end
   end
 end

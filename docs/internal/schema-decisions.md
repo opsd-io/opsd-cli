@@ -63,6 +63,9 @@ schema, usually with good defaults or family-specific meaning.
 | `spec.compute_groups[].security.egress.preset` | preset outbound policy for public droplets and nodes |
 | `spec.delivery.source.image.*` | depends on `source.mode=image` |
 | `spec.delivery.source.github.*` | depends on `source.mode=github` |
+| `spec.compute_groups[].delivery.source.github.repository_url` | Kubernetes GitOps source URL; embedded credentials are forbidden |
+| `spec.compute_groups[].delivery.source.github.revision` | defaults to `main` for Kubernetes GitOps |
+| `spec.compute_groups[].delivery.source.github.environment_path` | safe relative path consumed by the Argo CD root Application |
 | `spec.delivery.bootstrap.*` | active mainly for droplet |
 | `spec.delivery.env` | optional runtime env |
 | `spec.delivery.secret_env` | optional secure env |

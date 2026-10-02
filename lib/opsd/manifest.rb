@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "uri"
+
 module OPSd
   class Manifest
     SUPPORTED_PROVIDERS = %w[digitalocean aws azure gcp].freeze
@@ -317,6 +319,22 @@ module OPSd
       value.is_a?(Hash) ? value : {}
     end
 
+    def gitops_repository
+      return nil unless delivery["mode"] == "gitops"
+
+      source = delivery["source"]
+      github = source.is_a?(Hash) ? source["github"] : nil
+      return nil unless github.is_a?(Hash)
+      repository_url = gitops_repository_url_value(github)
+      return nil unless repository_url
+
+      {
+        "repository_url" => repository_url,
+        "revision" => github.fetch("revision", github.fetch("branch", "main")),
+        "environment_path" => github.fetch("environment_path", legacy_gitops_source?(github) ? "." : nil)
+      }
+    end
+
     def layers
       value = spec["layers"]
       value.is_a?(Hash) ? value : {}
@@ -330,6 +348,13 @@ module OPSd
           "components" => config.fetch("components", {})
         ).reject { |key, _| key == "default_enabled" }
       end
+    end
+
+    def kubernetes_layer_plan_data
+      repository = gitops_repository
+      return {} unless repository
+
+      { "gitops" => { "repository" => repository } }
     end
 
     def kubernetes_component_values(layer:, component:, module_defaults: {}, provider_defaults: {})
@@ -604,6 +629,7 @@ module OPSd
       end
 
       if entry["delivery"].is_a?(Hash)
+        errors.concat(validate_v2_gitops_delivery(entry["delivery"], "#{prefix}.delivery")) if entry["type"] == "cluster"
         bootstrap = entry["delivery"]["bootstrap"]
         if entry["delivery"].key?("bootstrap") && !bootstrap.is_a?(Hash)
           errors << "#{prefix}.delivery.bootstrap must be a mapping"
@@ -641,6 +667,79 @@ module OPSd
       end
 
       errors
+    end
+
+    def validate_v2_gitops_delivery(delivery, prefix)
+      return [] unless delivery["mode"] == "gitops"
+
+      errors = []
+      source = delivery["source"]
+      unless source.is_a?(Hash)
+        return ["#{prefix}.source must be a mapping for GitOps delivery"]
+      end
+      return ["#{prefix}.source.mode must be github for GitOps delivery"] unless source["mode"] == "github"
+
+      github = source["github"]
+      unless github.is_a?(Hash)
+        return ["#{prefix}.source.github must be a mapping for GitOps delivery"]
+      end
+
+      github.each_key do |key|
+        errors << "#{prefix}.source.github.#{key} is not supported" unless %w[repository_url revision environment_path repository branch].include?(key.to_s)
+      end
+
+      if legacy_gitops_source?(github) && !github.key?("repository_url") && gitops_repository_url_value(github).nil?
+        # Older provider blueprints use replacement placeholders; keep those scaffolds valid without rendering them as repository URLs.
+        return errors
+      end
+
+      url = gitops_repository_url_value(github)
+      errors << "#{prefix}.source.github.repository_url must be a valid HTTPS or SSH URL without embedded credentials" unless gitops_repository_url?(url)
+
+      revision = github.fetch("revision", github.fetch("branch", "main"))
+      if !revision.is_a?(String) || revision.strip.empty?
+        errors << "#{prefix}.source.github.revision must be a non-empty string"
+      end
+
+      path = github.fetch("environment_path", legacy_gitops_source?(github) ? "." : nil)
+      errors << "#{prefix}.source.github.environment_path must be a safe relative path" unless safe_gitops_path?(path)
+
+      errors
+    end
+
+    def gitops_repository_url_value(github)
+      return github["repository_url"] if github.key?("repository_url")
+
+      repository = github["repository"]
+      return unless repository.is_a?(String) && repository.match?(/\A[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\z/)
+
+      "https://github.com/#{repository}.git"
+    end
+
+    def legacy_gitops_source?(github)
+      github.key?("repository") || github.key?("branch")
+    end
+
+    def gitops_repository_url?(value)
+      return false unless non_empty_string?(value)
+
+      uri = URI.parse(value)
+      return false unless %w[https ssh].include?(uri.scheme) && !uri.host.to_s.empty?
+      return false if uri.query || uri.fragment
+      return false if uri.scheme == "https" && uri.userinfo
+      return false if uri.scheme == "ssh" && uri.password
+
+      !uri.path.to_s.empty? && uri.path != "/"
+    rescue URI::InvalidURIError
+      false
+    end
+
+    def safe_gitops_path?(value)
+      return false unless non_empty_string?(value)
+      return true if value == "."
+
+      segments = value.split("/", -1)
+      !value.start_with?("/") && segments.none? { |segment| segment.empty? || segment == ".." }
     end
 
     def validate_v2_resource_lifecycle(lifecycle, prefix)

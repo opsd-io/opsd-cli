@@ -24,6 +24,10 @@ class TemplateStoreTest < Minitest::Test
         },
         manifest.fetch("spec").fetch("layers")
       )
+      github = manifest.dig("spec", "compute_groups", 0, "delivery", "source", "github")
+      assert_equal "https://github.com/acme/platform.git", github.fetch("repository_url")
+      assert_equal "main", github.fetch("revision")
+      assert_equal "environments/production", github.fetch("environment_path")
     end
   end
 
