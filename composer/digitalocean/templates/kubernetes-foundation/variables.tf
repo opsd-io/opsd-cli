@@ -81,6 +81,18 @@ variable "vpc_ip_range" {
   default     = null
 }
 
+variable "cluster_subnet" {
+  description = "Optional pod-network CIDR for VPC-native DOKS networking"
+  type        = string
+  default     = null
+}
+
+variable "service_subnet" {
+  description = "Optional service-network CIDR for VPC-native DOKS networking"
+  type        = string
+  default     = null
+}
+
 variable "node_pool_name" {
   description = "Default node pool name"
   type        = string

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "uri"
+require "ipaddr"
 
 module OPSd
   class Manifest
@@ -496,6 +497,7 @@ module OPSd
           errors << "#{component_prefix} must be a DNS-like component identifier" unless component_id.to_s.match?(KUBERNETES_COMPONENT_ID_PATTERN)
           errors.concat(validate_v2_component(component_config, component_prefix, layer_enabled: config["enabled"] == true))
           errors.concat(validate_v2_bastion_component(component_config, component_prefix)) if name.to_s == "infrastructure" && component_id.to_s == "bastion"
+          errors.concat(validate_v2_gateway_api_component(component_config, component_prefix)) if name.to_s == "infrastructure" && component_id.to_s == "gateway-api"
         end
       end
       errors
@@ -560,6 +562,69 @@ module OPSd
       errors.concat(validate_v2_bastion_keys(values["digitalocean_keys"], "#{prefix}.values.digitalocean_keys", reference: true)) if values.key?("digitalocean_keys")
       errors.concat(validate_v2_bastion_keys(values["authorized_keys"], "#{prefix}.values.authorized_keys", reference: false)) if values.key?("authorized_keys")
       errors
+    end
+
+    def validate_v2_gateway_api_component(component, prefix)
+      return [] unless component.is_a?(Hash) && component["enabled"] == true
+
+      errors = []
+      errors << "#{prefix} is supported only for the digitalocean provider" unless provider == "digitalocean"
+
+      config = primary_kubernetes_config
+      version = config["kubernetes_version"].to_s
+      match = version.match(/\A(\d+)\.(\d+)(?:\.\d+(?:[-+][0-9A-Za-z.-]+)?)?\z/)
+      if match.nil? || match[1].to_i < 1 || (match[1].to_i == 1 && match[2].to_i < 33)
+        errors << "#{prefix} requires spec.compute_groups[0].config.kubernetes_version to be an explicit version 1.33 or later"
+      end
+      %w[cluster_subnet service_subnet].each do |key|
+        errors << "#{prefix} requires spec.compute_groups[0].config.#{key} for VPC-native networking" if blank?(config[key])
+      end
+
+      subnets = %w[cluster_subnet service_subnet].filter_map do |key|
+        next if blank?(config[key])
+
+        subnet = ipv4_cidr(config[key])
+        if subnet.nil? || !private_ipv4_cidr?(subnet)
+          errors << "spec.compute_groups[0].config.#{key} must be an RFC 1918 IPv4 CIDR"
+          next
+        end
+        [key, subnet]
+      end.to_h
+      cluster_subnet = subnets["cluster_subnet"]
+      service_subnet = subnets["service_subnet"]
+      if cluster_subnet && service_subnet && cidr_overlaps?(cluster_subnet, service_subnet)
+        errors << "spec.compute_groups[0].config.cluster_subnet must not overlap service_subnet"
+      end
+      vpc_subnet = ipv4_cidr(config["vpc_ip_range"]) unless blank?(config["vpc_ip_range"])
+      if !blank?(config["vpc_ip_range"]) && vpc_subnet.nil?
+        errors << "spec.compute_groups[0].config.vpc_ip_range must be an IPv4 CIDR"
+      elsif vpc_subnet && !private_ipv4_cidr?(vpc_subnet)
+        errors << "spec.compute_groups[0].config.vpc_ip_range must be an RFC 1918 IPv4 CIDR"
+      elsif vpc_subnet && [cluster_subnet, service_subnet].compact.any? { |subnet| cidr_overlaps?(vpc_subnet, subnet) }
+        errors << "spec.compute_groups[0].config VPC-native subnets must not overlap vpc_ip_range"
+      end
+      errors
+    end
+
+    def ipv4_cidr(value)
+      return unless value.is_a?(String) && value.include?("/")
+
+      subnet = IPAddr.new(value)
+      subnet.ipv4? ? subnet : nil
+    rescue IPAddr::InvalidAddressError
+      nil
+    end
+
+    def private_ipv4_cidr?(subnet)
+      private_ranges = [IPAddr.new("10.0.0.0/8"), IPAddr.new("172.16.0.0/12"), IPAddr.new("192.168.0.0/16")]
+      range = subnet.to_range
+      private_ranges.any? { |private_range| private_range.include?(range.begin) && private_range.include?(range.end) }
+    end
+
+    def cidr_overlaps?(left, right)
+      left_range = left.to_range
+      right_range = right.to_range
+      left_range.begin <= right_range.end && right_range.begin <= left_range.end
     end
 
     def validate_v2_bastion_keys(keys, prefix, reference:)
@@ -759,11 +824,11 @@ module OPSd
       return ["#{prefix} must be a mapping"] unless config.is_a?(Hash)
 
       errors = []
-      allowed_keys = %w[kubernetes_version auto_upgrade surge_upgrade ha create_vpc vpc_uuid vpc_ip_range node_pool_name node_size node_count node_auto_scale node_min_nodes node_max_nodes node_tags node_labels maintenance_day maintenance_start_time maintenance_duration]
+      allowed_keys = %w[kubernetes_version auto_upgrade surge_upgrade ha create_vpc vpc_uuid vpc_ip_range cluster_subnet service_subnet node_pool_name node_size node_count node_auto_scale node_min_nodes node_max_nodes node_tags node_labels maintenance_day maintenance_start_time maintenance_duration]
       config.each_key do |key|
         errors << "#{prefix}.#{key} is not supported" unless allowed_keys.include?(key.to_s)
       end
-      %w[kubernetes_version vpc_uuid vpc_ip_range node_pool_name node_size maintenance_day maintenance_start_time].each do |key|
+      %w[kubernetes_version vpc_uuid vpc_ip_range cluster_subnet service_subnet node_pool_name node_size maintenance_day maintenance_start_time].each do |key|
         errors << "#{prefix}.#{key} must be a non-empty string" if config.key?(key) && blank?(config[key])
       end
       %w[auto_upgrade surge_upgrade ha create_vpc node_auto_scale].each do |key|

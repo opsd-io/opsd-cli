@@ -21,6 +21,14 @@ applications and are not installed by this foundation stack yet.
 2. `create_vpc = false`:
 - uses existing VPC from `vpc_uuid`
 
+## DOKS-managed Gateway API
+
+To use the DOKS-managed Gateway API, configure an explicit Kubernetes version
+of 1.33 or later and set both `cluster_subnet` and `service_subnet` to
+non-overlapping RFC 1918 CIDRs. OPSd validates these prerequisites when the
+`gateway-api` infrastructure component is enabled. DOKS supplies the Cilium
+GatewayClass and manages its Gateway API CRDs.
+
 ## How to run locally
 
 ```bash
