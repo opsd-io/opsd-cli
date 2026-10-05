@@ -752,6 +752,8 @@ module OPSd
       lines << %(vpc_name        = "#{manifest.metadata_name}-vpc")
       lines << %(vpc_description = "#{default_project_description(manifest)} VPC")
       lines << %(vpc_ip_range    = #{hcl_scalar(config["vpc_ip_range"])})
+      lines << %(cluster_subnet  = #{hcl_scalar(config["cluster_subnet"])})
+      lines << %(service_subnet  = #{hcl_scalar(config["service_subnet"])})
       lines << ""
       lines << %(node_pool_name  = #{hcl_scalar(config.fetch("node_pool_name", "default"))})
       lines << %(node_size       = #{hcl_scalar(config.fetch("node_size", profile_value(manifest.workload_profile)))})
@@ -791,6 +793,8 @@ module OPSd
       lines << %(vpc_name        = "#{manifest.metadata_name}-vpc")
       lines << %(vpc_description = "#{default_project_description(manifest)} VPC")
       lines << %(vpc_ip_range    = #{hcl_scalar(config["vpc_ip_range"])})
+      lines << %(cluster_subnet  = #{hcl_scalar(config["cluster_subnet"])})
+      lines << %(service_subnet  = #{hcl_scalar(config["service_subnet"])})
       lines << ""
       lines << %(node_pool_name  = #{hcl_scalar(config.fetch("node_pool_name", "default"))})
       lines << %(node_size       = #{hcl_scalar(config.fetch("node_size", profile_value(manifest.workload_profile)))})

@@ -14,6 +14,8 @@ vpc_uuid        = null
 vpc_name        = "scenario-kubernetes-foundation-vpc"
 vpc_description = "Scenario kubernetes-foundation VPC managed by OPSd"
 vpc_ip_range    = null
+cluster_subnet  = null
+service_subnet  = null
 
 node_pool_name  = "default"
 node_size       = "s-2vcpu-4gb"

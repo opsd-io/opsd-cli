@@ -87,6 +87,10 @@ module "kubernetes" {
   region                 = var.region
   kubernetes_version     = var.kubernetes_version
   vpc_uuid               = local.vpc_uuid_effective
+<% if manifest.primary_kubernetes_config.key?("cluster_subnet") || manifest.primary_kubernetes_config.key?("service_subnet") %>
+  cluster_subnet         = var.cluster_subnet
+  service_subnet         = var.service_subnet
+<% end %>
   tags                   = var.cluster_tags
   auto_upgrade           = var.auto_upgrade
   surge_upgrade          = var.surge_upgrade

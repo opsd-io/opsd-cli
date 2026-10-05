@@ -464,7 +464,37 @@ compute_groups:
       create_vpc: true
 ```
 
-Supported fields include Kubernetes version, upgrade and HA flags, VPC settings, node-pool sizing/autoscaling, tags/labels, and maintenance settings.
+Supported fields include Kubernetes version, upgrade and HA flags, VPC settings, optional `cluster_subnet` and `service_subnet` CIDRs for DigitalOcean VPC-native networking, node-pool sizing/autoscaling, tags/labels, and maintenance settings. Set both subnet fields together; DigitalOcean requires non-overlapping RFC 1918 ranges.
+
+The DOKS-managed Gateway API baseline requires an explicit Kubernetes version
+of 1.33 or later and both VPC-native subnet fields. Enable the component under
+`spec.layers.infrastructure` to have OPSd validate those prerequisites before
+platform resources are rendered:
+
+```yaml
+spec:
+  compute_groups:
+    - id: primary
+      type: cluster
+      role: cluster
+      replicas: 1
+      profile: s-2vcpu-4gb
+      config:
+        kubernetes_version: 1.33.1-do.0
+        cluster_subnet: 10.240.0.0/16
+        service_subnet: 10.241.0.0/19
+  layers:
+    infrastructure:
+      enabled: true
+      components:
+        gateway-api:
+          enabled: true
+```
+
+The example subnet ranges must also be checked against the team's existing VPC
+and VPC-native cluster ranges before use. DOKS supplies the Cilium
+`GatewayClass` named `cilium` and manages the Gateway API CRDs; OPSd does not
+install a Gateway controller or CRDs.
 
 ### Per-resource destroy protection
 
