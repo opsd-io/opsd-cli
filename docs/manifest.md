@@ -543,6 +543,64 @@ once DNS validation succeeds. A public Gateway hostname also needs its address
 record to point to the load balancer; ExternalDNS automation is configured
 separately.
 
+### DigitalOcean ExternalDNS
+
+Enable ExternalDNS separately under the infrastructure layer and scope it to
+the DigitalOcean DNS zones and ownership ID for this cluster:
+
+```yaml
+external-dns:
+  enabled: true
+  values:
+    domain_filters: [example.com]
+    txt_owner_id: production-cluster
+    token_secret_name: digitalocean-dns # Optional; this is the default.
+    policy: upsert-only # Optional; this is the default.
+```
+
+OPSd generates an Argo CD Application for the pinned ExternalDNS chart and a
+DigitalOcean webhook sidecar. Before syncing it, create a Secret in the
+`external-dns` namespace with key `access-token` (the token must have DNS write
+access):
+
+```sh
+kubectl create namespace external-dns
+kubectl -n external-dns create secret generic digitalocean-dns \
+  --from-literal=access-token="$DIGITALOCEAN_DNS_TOKEN"
+```
+
+The default policy is `upsert-only`: ExternalDNS can create and update records,
+but will not remove them when a route or Service disappears. TXT registry
+records track ownership; use a unique `txt_owner_id` for every cluster and keep
+`domain_filters` limited to zones it may manage. `sync` is available when
+automatic deletion is intended.
+
+ExternalDNS reads `HTTPRoute` and `Service` resources. Add the
+`external-dns.kubernetes.io/hostname` annotation to each route or Service that
+should publish a name. For an `HTTPRoute`, the record target comes from the
+parent Gateway's status address; a Gateway listener hostname by itself does
+not create a DNS record. The selected provider is the community
+[`external-dns-digitalocean-webhook`](https://github.com/amoniacou/external-dns-digitalocean-webhook),
+which is actively releasing but is not maintained or endorsed by the
+ExternalDNS project. Pinning its release and limiting domains reduces
+operational risk, but does not remove the need to review upstream changes.
+
+For example, put the hostname annotation on the route:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: app
+  annotations:
+    external-dns.kubernetes.io/hostname: app.example.com
+spec:
+  parentRefs:
+    - name: public
+      namespace: default
+  hostnames: [app.example.com]
+```
+
 ### Per-resource destroy protection
 
 Resources can opt into explicit destroy protection:

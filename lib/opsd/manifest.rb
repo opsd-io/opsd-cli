@@ -384,6 +384,10 @@ module OPSd
       kubernetes_component_values(layer: "infrastructure", component: "gateway-api")
     end
 
+    def kubernetes_external_dns_values
+      kubernetes_component_values(layer: "infrastructure", component: "external-dns")
+    end
+
     private
 
     def validate_common
@@ -507,6 +511,7 @@ module OPSd
           errors.concat(validate_v2_component(component_config, component_prefix, layer_enabled: config["enabled"] == true))
           errors.concat(validate_v2_bastion_component(component_config, component_prefix)) if name.to_s == "infrastructure" && component_id.to_s == "bastion"
           errors.concat(validate_v2_gateway_api_component(component_config, component_prefix)) if name.to_s == "infrastructure" && component_id.to_s == "gateway-api"
+          errors.concat(validate_v2_external_dns_component(component_config, component_prefix)) if name.to_s == "infrastructure" && component_id.to_s == "external-dns"
         end
       end
       errors
@@ -677,6 +682,43 @@ module OPSd
         errors << "spec.compute_groups[0].config.vpc_ip_range must be an RFC 1918 IPv4 CIDR"
       elsif vpc_subnet && [cluster_subnet, service_subnet].compact.any? { |subnet| cidr_overlaps?(vpc_subnet, subnet) }
         errors << "spec.compute_groups[0].config VPC-native subnets must not overlap vpc_ip_range"
+      end
+      errors
+    end
+
+    def validate_v2_external_dns_component(component, prefix)
+      return [] unless component.is_a?(Hash)
+
+      values = component["values"].is_a?(Hash) ? component["values"] : {}
+      overrides = component["provider_overrides"]
+      provider_values = overrides.is_a?(Hash) ? overrides.dig(provider, "values") : nil
+      values = deep_merge(values, provider_values.is_a?(Hash) ? provider_values : {})
+      errors = []
+      if component["enabled"] == true && provider != "digitalocean"
+        errors << "#{prefix} is currently supported only for the digitalocean provider"
+      end
+      values.each_key do |key|
+        errors << "#{prefix}.values.#{key} is not supported" unless %w[domain_filters txt_owner_id token_secret_name policy].include?(key.to_s)
+      end
+
+      domains = values["domain_filters"]
+      if component["enabled"] == true && (!domains.is_a?(Array) || domains.empty?)
+        errors << "#{prefix}.values.domain_filters must be a non-empty array"
+      elsif domains.is_a?(Array)
+        domains.each_with_index do |domain, index|
+          errors << "#{prefix}.values.domain_filters[#{index}] must be a valid DNS domain" unless valid_dns_name?(domain) && !domain.start_with?("*.")
+        end
+        errors << "#{prefix}.values.domain_filters must not contain duplicates" unless domains.uniq == domains
+      end
+      owner_id = values["txt_owner_id"]
+      if component["enabled"] == true || values.key?("txt_owner_id")
+        errors << "#{prefix}.values.txt_owner_id must be a unique DNS-like identifier (1-63 characters)" unless owner_id.is_a?(String) && owner_id.length.between?(1, 63) && owner_id.match?(/\A[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\z/i)
+      end
+      if values.key?("token_secret_name") && !valid_kubernetes_name?(values["token_secret_name"])
+        errors << "#{prefix}.values.token_secret_name must be a valid Kubernetes resource name"
+      end
+      if values.key?("policy") && !%w[create-only upsert-only sync].include?(values["policy"])
+        errors << "#{prefix}.values.policy must be create-only, upsert-only, or sync"
       end
       errors
     end

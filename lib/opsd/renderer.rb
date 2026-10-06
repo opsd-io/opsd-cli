@@ -129,6 +129,7 @@ module OPSd
       end
 
       generate_gateway_profiles(layer_root, manifest)
+      generate_external_dns(layer_root, manifest) if manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "external-dns")
       generate_argocd_bootstrap(output_path, manifest, gitops_repository:) if gitops_repository
     end
 
@@ -136,6 +137,8 @@ module OPSd
       generated_bootstrap = layer.fetch("id") == "bootstrap" && gitops_repository
       generated_gateways = layer.fetch("id") == "infrastructure" &&
                            %w[public private].any? { |profile| manifest.kubernetes_gateway_profile_enabled?(profile:) }
+      generated_external_dns = layer.fetch("id") == "infrastructure" &&
+                               manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "external-dns")
       next_step = if generated_bootstrap
                     bootstrap_manifest_path = Shellwords.escape(
                       File.join(gitops_repository.fetch("environment_path"), "layers", "00-bootstrap", "argocd")
@@ -170,6 +173,11 @@ module OPSd
                       run `kubectl port-forward` locally using the context configured for that tunnel.
                       Keep kubeconfig and Kubernetes credentials on the workstation; do not copy them
                       to the bastion.
+                    DETAIL
+                  elsif generated_external_dns
+                    <<~DETAIL
+
+                      ExternalDNS is configured under `layers/10-infrastructure/external-dns.yaml`. Set a unique TXT owner ID and domain filters in the OPSd manifest, then create the `external-dns` namespace Secret named in the component values with key `access-token` before syncing.
                     DETAIL
                   elsif generated_gateways
                     if gitops_repository
@@ -220,6 +228,78 @@ module OPSd
         profile_values = manifest.kubernetes_gateway_values.fetch(profile)
         certificates_path.join("#{profile}.yaml").write(YAML.dump(gateway_certificate(profile, profile_values)))
       end
+    end
+
+    def generate_external_dns(layer_root, manifest)
+      values = manifest.kubernetes_external_dns_values
+      domains = values.fetch("domain_filters")
+      token_secret = values.fetch("token_secret_name", "digitalocean-dns")
+      helm_values = {
+        "sources" => %w[gateway-httproute service],
+        "policy" => values.fetch("policy", "upsert-only"),
+        "registry" => "txt",
+        "txtOwnerId" => values.fetch("txt_owner_id"),
+        "domainFilters" => domains,
+        "provider" => {
+          "name" => "webhook",
+          "webhook" => {
+            "image" => {
+              "repository" => "ghcr.io/amoniacou/external-dns-digitalocean-webhook",
+              "tag" => "1.0.4"
+            },
+            "env" => [
+              {
+                "name" => "DO_TOKEN",
+                "valueFrom" => {
+                  "secretKeyRef" => { "name" => token_secret, "key" => "access-token" }
+                }
+              },
+              { "name" => "DO_DOMAIN_FILTER", "value" => domains.join(",") }
+            ],
+            "args" => ["--host=localhost", "--port=8080", "--health-host=0.0.0.0", "--health-port=8888"],
+            "securityContext" => {
+              "runAsUser" => 65532,
+              "runAsGroup" => 65532,
+              "runAsNonRoot" => true,
+              "allowPrivilegeEscalation" => false,
+              "readOnlyRootFilesystem" => true,
+              "capabilities" => { "drop" => ["ALL"] }
+            },
+            "livenessProbe" => { "httpGet" => { "path" => "/healthz", "port" => 8888 } },
+            "readinessProbe" => { "httpGet" => { "path" => "/healthz", "port" => 8888 } }
+          }
+        },
+        "extraArgs" => { "webhook-provider-url" => "http://localhost:8080" }
+      }
+      application = {
+        "apiVersion" => "argoproj.io/v1alpha1",
+        "kind" => "Application",
+        "metadata" => {
+          "name" => "opsd-external-dns",
+          "namespace" => "argocd",
+          "annotations" => { "argocd.argoproj.io/sync-wave" => "0" }
+        },
+        "spec" => {
+          "project" => "infrastructure",
+          "source" => {
+            "repoURL" => "https://kubernetes-sigs.github.io/external-dns/",
+            "chart" => "external-dns",
+            "targetRevision" => "1.23.0",
+            "helm" => { "values" => YAML.dump(helm_values) }
+          },
+          "destination" => {
+            "server" => "https://kubernetes.default.svc",
+            "namespace" => "external-dns"
+          },
+          "syncPolicy" => {
+            "automated" => { "prune" => true, "selfHeal" => true },
+            "syncOptions" => ["CreateNamespace=true"]
+          }
+        }
+      }
+      output_path = layer_root.join("10-infrastructure", "external-dns.yaml")
+      output_path.dirname.mkpath
+      output_path.write(YAML.dump(application))
     end
 
     def gateway_resource(profile, profile_values = {})
@@ -368,7 +448,9 @@ module OPSd
           layer,
           gitops_repository.fetch("repository_url"),
           allow_cert_manager: layer.fetch("id") == "infrastructure" &&
-            gateway_tls_enabled?(manifest)
+            gateway_tls_enabled?(manifest),
+          allow_external_dns: layer.fetch("id") == "infrastructure" &&
+            manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "external-dns")
         )
         filename = "#{layer.fetch('id')}.yaml"
         projects_path.join(filename).write(YAML.dump(project))
@@ -486,7 +568,7 @@ module OPSd
       }
     end
 
-    def argocd_project(layer, repository_url, allow_cert_manager: false)
+    def argocd_project(layer, repository_url, allow_cert_manager: false, allow_external_dns: false)
       bootstrap = layer.fetch("id") == "bootstrap"
       project = {
         "apiVersion" => "argoproj.io/v1alpha1",
@@ -501,7 +583,7 @@ module OPSd
         },
         "spec" => {
           "description" => layer.fetch("description"),
-          "sourceRepos" => [repository_url, *(["https://charts.jetstack.io"] if allow_cert_manager)],
+          "sourceRepos" => [repository_url, *(["https://charts.jetstack.io"] if allow_cert_manager), *(["https://kubernetes-sigs.github.io/external-dns/"] if allow_external_dns)],
           "destinations" => [
             {
               "server" => "https://kubernetes.default.svc",
