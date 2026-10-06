@@ -24,11 +24,12 @@ require_relative "manifest_capabilities_validator"
 require_relative "provider_catalog_store"
 require_relative "version"
 require_relative "kubernetes_bootstrap"
+require_relative "modules_synchronizer"
 
 module OPSd
   class CLI
     COMPLETION_COMMANDS = %w[
-      version completion config list describe init validate verify render bootstrap export add resize scale attach detach remove blueprints help
+      version completion config list describe init validate verify render modules bootstrap export add resize scale attach detach remove blueprints help
     ].freeze
     COMPLETION_SUBCOMMANDS = {
       completion: %w[install bash zsh fish],
@@ -38,6 +39,7 @@ module OPSd
       describe: %w[blueprint],
       init: %w[blueprint],
       validate_render: %w[manifest module],
+      modules: %w[sync],
       verify: %w[config plan lifecycle],
       export: %w[exit-pack],
       add: %w[compute-group database cache object-storage cdn-endpoint load-balancer node],
@@ -95,6 +97,8 @@ module OPSd
         run_verify
       when "render"
         run_render
+      when "modules"
+        run_modules
       when "bootstrap"
         run_bootstrap
       when "export"
@@ -185,6 +189,8 @@ module OPSd
         puts verify_usage
       when "render"
         puts render_usage
+      when "modules"
+        puts modules_usage
       when "bootstrap"
         puts bootstrap_usage
       when "export"
@@ -656,6 +662,28 @@ module OPSd
       puts "  tofu plan"
       puts "  tofu apply"
       puts "  opsd bootstrap --manifest #{Shellwords.escape(File.expand_path(manifest_path))}  # install Argo CD and configure Git repository access"
+    end
+
+    def run_modules
+      action = @argv.shift
+      return puts(modules_usage) if action.nil? || help_flag?(action) || help_requested?
+      raise "Unsupported modules action: #{action}" unless action == "sync"
+
+      manifest_path = @argv.shift
+      return puts(modules_usage) if manifest_path.nil? || help_flag?(manifest_path)
+      update = @argv.delete("--update")
+      raise "Usage: opsd modules sync <manifest.yaml> [--update]" unless @argv.empty?
+
+      lock = ModulesSynchronizer.new(
+        workspace_root: @workspace,
+        env: ENV,
+        module_catalog: module_catalog
+      ).sync(manifest_path:, update: !update.nil?)
+
+      puts "Synchronized OPSd modules into #{@workspace}"
+      puts "DigitalOcean modules: #{lock.dig('provider_modules', 'version')} (#{lock.dig('provider_modules', 'commit')})"
+      puts "Kubernetes modules: #{lock.dig('kubernetes_modules', 'version')} (#{lock.dig('kubernetes_modules', 'commit')})"
+      puts "Lock file: #{Pathname(manifest_path).expand_path.dirname.join('opsd.lock.yaml')}"
     end
 
     def run_bootstrap
@@ -2802,6 +2830,26 @@ module OPSd
               ["config", "Verify a manifest against the OPSd contract"],
               ["plan", "Verify an OpenTofu plan against the OPSd contract"],
               ["lifecycle", "Verify a version set against lifecycle compatibility data"]
+            ]
+          ]
+        ]
+      )
+    end
+
+    def modules_usage
+      help_block(
+        "Usage: opsd modules sync <manifest.yaml> [--update]",
+        [
+          [
+            "Commands",
+            [
+              ["sync", "Materialize the pinned DigitalOcean and Kubernetes modules"]
+            ]
+          ],
+          [
+            "Options",
+            [
+              ["--update", "Resolve current refs and explicitly update the module pins"]
             ]
           ]
         ]
