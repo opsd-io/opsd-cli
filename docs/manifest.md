@@ -489,12 +489,24 @@ spec:
       components:
         gateway-api:
           enabled: true
+          values:
+            public:
+              enabled: true
+            private:
+              enabled: false
 ```
 
 The example subnet ranges must also be checked against the team's existing VPC
 and VPC-native cluster ranges before use. DOKS supplies the Cilium
 `GatewayClass` named `cilium` and manages the Gateway API CRDs; OPSd does not
-install a Gateway controller or CRDs.
+install a Gateway controller or CRDs. Public and private Gateway profiles are
+independently disabled by default. Enabling the public profile generates an
+external Gateway; enabling the private profile generates a Gateway annotated
+to request an internal DigitalOcean Load Balancer. No Gateway or Load Balancer
+is generated while both profiles are disabled. The generated manifests are
+placed under `layers/10-infrastructure/gateways/` for the configured GitOps
+repository. Both profiles start with an HTTP listener on port 80; TLS
+configuration is covered by the certificate integration.
 
 ### Per-resource destroy protection
 

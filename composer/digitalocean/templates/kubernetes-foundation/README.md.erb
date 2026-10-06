@@ -29,6 +29,12 @@ non-overlapping RFC 1918 CIDRs. OPSd validates these prerequisites when the
 `gateway-api` infrastructure component is enabled. DOKS supplies the Cilium
 GatewayClass and manages its Gateway API CRDs.
 
+Public and private Gateway profiles are independently disabled by default.
+Enable either profile in the manifest to generate its Gateway under
+`layers/10-infrastructure/gateways/`. The public Gateway requests the default
+external Network Load Balancer; the private Gateway requests an internal load
+balancer. No Gateway or Load Balancer is created when both profiles are off.
+
 ## How to run locally
 
 ```bash

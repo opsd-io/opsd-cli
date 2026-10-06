@@ -119,11 +119,50 @@ class KubernetesFoundationTest < Minitest::Test
       assert_equal [0, 10, 20, 30, 40], plan.fetch("layers").map { |layer| layer.fetch("order") }
       assert File.file?(File.join(output_path, "layers", "00-bootstrap", "README.md"))
       assert File.file?(File.join(output_path, "layers", "10-infrastructure", "README.md"))
+      refute File.exist?(File.join(output_path, "layers", "10-infrastructure", "gateways"))
       assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "root app-of-apps"
       assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "client repository"
       assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "kubectl port-forward"
       assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "bastion"
       assert_includes File.read(File.join(output_path, "layers", "00-bootstrap", "README.md")), "clusters/production/layers/00-bootstrap/argocd/projects/bootstrap.yaml"
+    end
+  end
+
+  def test_kubernetes_foundation_renders_public_and_private_gateways_independently
+    %w[public private].each do |profile|
+      manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+      manifest_data.dig("spec", "compute_groups", 0, "config").merge!(
+        "kubernetes_version" => "1.33.1-do.0",
+        "cluster_subnet" => "10.240.0.0/16",
+        "service_subnet" => "10.241.0.0/19"
+      )
+      manifest_data.dig("spec", "layers", "infrastructure", "components")["gateway-api"] = {
+        "enabled" => true,
+        "values" => { profile => { "enabled" => true } }
+      }
+      manifest = OPSd::Manifest.new(manifest_data)
+      manifest.validate!
+
+      Dir.mktmpdir("opsd-gateway-profile") do |workspace|
+        output_path = File.join(workspace, "generated")
+        OPSd::Renderer.new(
+          app_root: File.expand_path("..", __dir__),
+          workspace_root: workspace
+        ).render(manifest, output_path)
+
+        gateway_dir = File.join(output_path, "layers", "10-infrastructure", "gateways")
+        assert_equal ["#{profile}.yaml"], Dir.glob(File.join(gateway_dir, "*.yaml")).map { |path| File.basename(path) }
+        gateway = YAML.load_file(File.join(gateway_dir, "#{profile}.yaml"))
+        assert_equal "Gateway", gateway.fetch("kind")
+        assert_equal "cilium", gateway.dig("spec", "gatewayClassName")
+        assert_equal "HTTP", gateway.dig("spec", "listeners", 0, "protocol")
+
+        if profile == "private"
+          assert_equal "INTERNAL", gateway.dig("spec", "infrastructure", "annotations", "service.beta.kubernetes.io/do-loadbalancer-network")
+        else
+          refute gateway.dig("spec", "infrastructure", "annotations")
+        end
+      end
     end
   end
 

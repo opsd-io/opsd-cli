@@ -125,14 +125,17 @@ module OPSd
       layers.each do |layer|
         layer_path = layer_root.join(layer.fetch("directory"))
         layer_path.mkpath
-        layer_path.join("README.md").write(layer_readme(layer, gitops_repository:))
+        layer_path.join("README.md").write(layer_readme(layer, gitops_repository:, manifest:))
       end
 
+      generate_gateway_profiles(layer_root, manifest)
       generate_argocd_bootstrap(output_path, manifest, gitops_repository:) if gitops_repository
     end
 
-    def layer_readme(layer, gitops_repository:)
+    def layer_readme(layer, gitops_repository:, manifest:)
       generated_bootstrap = layer.fetch("id") == "bootstrap" && gitops_repository
+      generated_gateways = layer.fetch("id") == "infrastructure" &&
+                           %w[public private].any? { |profile| manifest.kubernetes_gateway_profile_enabled?(profile:) }
       next_step = if generated_bootstrap
                     bootstrap_manifest_path = Shellwords.escape(
                       File.join(gitops_repository.fetch("environment_path"), "layers", "00-bootstrap", "argocd")
@@ -168,6 +171,17 @@ module OPSd
                       Keep kubeconfig and Kubernetes credentials on the workstation; do not copy them
                       to the bastion.
                     DETAIL
+                  elsif generated_gateways
+                    if gitops_repository
+                      <<~DETAIL
+
+                        DOKS-managed Gateway resources are generated under `layers/10-infrastructure/gateways/`.
+                        Commit this subtree beneath `#{gitops_repository.fetch("environment_path")}` in the
+                        client repository so Argo CD can reconcile the enabled Gateway profiles.
+                      DETAIL
+                    else
+                      "\nDOKS-managed Gateway resources are generated under `layers/10-infrastructure/gateways/`.\n"
+                    end
                   else
                     "\nThis layer is planned in `opsd.layers.yaml` but is not generated yet.\n"
                   end
@@ -180,6 +194,49 @@ module OPSd
         Status: #{layer.fetch("enabled") ? "enabled" : "disabled"}.
         #{next_step}
       README
+    end
+
+    def generate_gateway_profiles(layer_root, manifest)
+      profiles = %w[public private].select { |profile| manifest.kubernetes_gateway_profile_enabled?(profile:) }
+      return if profiles.empty?
+
+      output_path = layer_root.join("10-infrastructure", "gateways")
+      output_path.mkpath
+      profiles.each do |profile|
+        output_path.join("#{profile}.yaml").write(YAML.dump(gateway_resource(profile)))
+      end
+    end
+
+    def gateway_resource(profile)
+      gateway = {
+        "apiVersion" => "gateway.networking.k8s.io/v1",
+        "kind" => "Gateway",
+        "metadata" => {
+          "name" => "opsd-#{profile}-gateway",
+          "namespace" => "default",
+          "labels" => {
+            "app.kubernetes.io/managed-by" => "opsd",
+            "opsd.io/profile" => profile
+          }
+        },
+        "spec" => {
+          "gatewayClassName" => "cilium",
+          "listeners" => [
+            {
+              "name" => "http",
+              "protocol" => "HTTP",
+              "port" => 80,
+              "allowedRoutes" => { "namespaces" => { "from" => "All" } }
+            }
+          ]
+        }
+      }
+      if profile == "private"
+        gateway.fetch("spec")["infrastructure"] = {
+          "annotations" => { "service.beta.kubernetes.io/do-loadbalancer-network" => "INTERNAL" }
+        }
+      end
+      gateway
     end
 
     def generate_argocd_bootstrap(output_path, manifest, gitops_repository:)
