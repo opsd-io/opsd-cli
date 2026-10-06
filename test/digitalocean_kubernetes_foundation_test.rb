@@ -220,6 +220,47 @@ class KubernetesFoundationTest < Minitest::Test
     end
   end
 
+  def test_kubernetes_foundation_renders_external_dns_with_scoped_secret_and_ownership
+    manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+    manifest_data.dig("spec", "layers", "infrastructure", "components")["external-dns"] = {
+      "enabled" => true,
+      "values" => {
+        "domain_filters" => ["example.com"],
+        "txt_owner_id" => "production-cluster",
+        "token_secret_name" => "digitalocean-dns-token"
+      }
+    }
+    manifest = OPSd::Manifest.new(manifest_data)
+    manifest.validate!
+
+    Dir.mktmpdir("opsd-external-dns") do |workspace|
+      output_path = File.join(workspace, "generated")
+      OPSd::Renderer.new(
+        app_root: File.expand_path("..", __dir__),
+        workspace_root: workspace
+      ).render(manifest, output_path)
+
+      app_path = File.join(output_path, "layers", "10-infrastructure", "external-dns.yaml")
+      app = YAML.load_file(app_path)
+      values = YAML.safe_load(app.dig("spec", "source", "helm", "values"))
+      infra_project = YAML.load_file(File.join(output_path, "layers", "00-bootstrap", "argocd", "projects", "infrastructure.yaml"))
+
+      assert_equal "external-dns", app.dig("spec", "source", "chart")
+      assert_equal "1.23.0", app.dig("spec", "source", "targetRevision")
+      assert_equal "external-dns", app.dig("spec", "destination", "namespace")
+      assert_equal %w[gateway-httproute service], values.fetch("sources")
+      assert_equal "upsert-only", values.fetch("policy")
+      assert_equal "txt", values.fetch("registry")
+      assert_equal "production-cluster", values.fetch("txtOwnerId")
+      assert_equal ["example.com"], values.fetch("domainFilters")
+      assert_equal "digitalocean-dns-token", values.dig("provider", "webhook", "env", 0, "valueFrom", "secretKeyRef", "name")
+      assert_equal "access-token", values.dig("provider", "webhook", "env", 0, "valueFrom", "secretKeyRef", "key")
+      assert_equal true, values.dig("provider", "webhook", "securityContext", "readOnlyRootFilesystem")
+      assert_includes infra_project.dig("spec", "sourceRepos"), "https://kubernetes-sigs.github.io/external-dns/"
+      refute_includes File.read(app_path), "DO_TOKEN\":\n        value:"
+    end
+  end
+
   def test_kubernetes_foundation_renders_enabled_bastion_and_control_plane_sources
     manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
     manifest_data["spec"]["layers"]["infrastructure"] = {

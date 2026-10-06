@@ -68,6 +68,49 @@ class ManifestValidationTest < Minitest::Test
     assert_equal "app.example.com", manifest.kubernetes_gateway_values.dig("public", "hostname")
   end
 
+  def test_v2_accepts_scoped_external_dns_configuration
+    data = kubernetes_manifest
+    data.dig("spec", "layers", "infrastructure", "components")["external-dns"] = {
+      "enabled" => true,
+      "values" => {
+        "domain_filters" => ["example.com"],
+        "txt_owner_id" => "prod-cluster",
+        "token_secret_name" => "dns-api-token"
+      }
+    }
+
+    manifest = OPSd::Manifest.new(data)
+    manifest.validate!
+
+    assert_equal ["example.com"], manifest.kubernetes_external_dns_values.fetch("domain_filters")
+  end
+
+  def test_v2_rejects_external_dns_without_domain_filter_or_owner
+    data = kubernetes_manifest
+    data.dig("spec", "layers", "infrastructure", "components")["external-dns"] = {
+      "enabled" => true,
+      "values" => { "domain_filters" => [], "txt_owner_id" => "" }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.infrastructure.components.external-dns.values.domain_filters must be a non-empty array"
+    assert_includes error.errors, "spec.layers.infrastructure.components.external-dns.values.txt_owner_id must be a unique DNS-like identifier (1-63 characters)"
+  end
+
+  def test_v2_rejects_digitalocean_external_dns_for_other_providers
+    data = kubernetes_manifest
+    data["spec"]["provider"] = "aws"
+    data.dig("spec", "layers", "infrastructure", "components")["external-dns"] = {
+      "enabled" => true,
+      "values" => { "domain_filters" => ["example.com"], "txt_owner_id" => "cluster" }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.infrastructure.components.external-dns is currently supported only for the digitalocean provider"
+  end
+
   def test_v2_requires_acme_settings_for_gateway_hostname
     data = kubernetes_manifest
     data.dig("spec", "compute_groups", 0, "config").merge!(
