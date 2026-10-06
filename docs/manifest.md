@@ -505,8 +505,43 @@ external Gateway; enabling the private profile generates a Gateway annotated
 to request an internal DigitalOcean Load Balancer. No Gateway or Load Balancer
 is generated while both profiles are disabled. The generated manifests are
 placed under `layers/10-infrastructure/gateways/` for the configured GitOps
-repository. Both profiles start with an HTTP listener on port 80; TLS
-configuration is covered by the certificate integration.
+repository. Profiles may remain HTTP-only or request a certificate by setting
+`hostname`. When a hostname is set, OPSd adds an HTTPS listener, a cert-manager
+`Certificate`, a DigitalOcean DNS-01 `ClusterIssuer`, and an Argo CD
+Application for cert-manager pinned to its upstream chart version.
+
+```yaml
+gateway-api:
+  enabled: true
+  values:
+    acme:
+      email: platform@example.com
+      server: staging # Optional: production is the default.
+      dns_token_secret_name: digitalocean-dns # Optional.
+    public:
+      enabled: true
+      hostname: app.example.com
+      tls_secret_name: app-example-com-tls # Optional.
+```
+
+Before syncing the generated layer, ensure the domain's authoritative DNS zone
+is hosted by DigitalOcean and create a Kubernetes Secret containing a
+DigitalOcean API token with DNS write access in the `cert-manager` namespace
+(the cert-manager Cluster Resource Namespace):
+
+```sh
+kubectl create namespace cert-manager
+kubectl -n cert-manager create secret generic digitalocean-dns \
+  --from-literal=access-token="$DIGITALOCEAN_DNS_TOKEN"
+```
+
+The default Secret name is `digitalocean-dns` and the required key is
+`access-token`; set `acme.dns_token_secret_name` to use another name. Keep the
+token outside the manifest and generated repository. Start with the Let's
+Encrypt staging directory for test domains and change `server` to `production`
+once DNS validation succeeds. A public Gateway hostname also needs its address
+record to point to the load balancer; ExternalDNS automation is configured
+separately.
 
 ### Per-resource destroy protection
 

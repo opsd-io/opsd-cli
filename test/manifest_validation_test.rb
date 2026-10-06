@@ -47,6 +47,44 @@ class ManifestValidationTest < Minitest::Test
     assert_equal false, manifest.kubernetes_gateway_profile_enabled?(profile: "private")
   end
 
+  def test_v2_accepts_gateway_certificate_configuration
+    data = kubernetes_manifest
+    data.dig("spec", "compute_groups", 0, "config").merge!(
+      "kubernetes_version" => "1.33.1-do.0",
+      "cluster_subnet" => "10.240.0.0/16",
+      "service_subnet" => "10.241.0.0/19"
+    )
+    data.dig("spec", "layers", "infrastructure", "components")["gateway-api"] = {
+      "enabled" => true,
+      "values" => {
+        "acme" => { "email" => "platform@example.com", "server" => "staging" },
+        "public" => { "enabled" => true, "hostname" => "app.example.com" }
+      }
+    }
+    manifest = OPSd::Manifest.new(data)
+
+    manifest.validate!
+
+    assert_equal "app.example.com", manifest.kubernetes_gateway_values.dig("public", "hostname")
+  end
+
+  def test_v2_requires_acme_settings_for_gateway_hostname
+    data = kubernetes_manifest
+    data.dig("spec", "compute_groups", 0, "config").merge!(
+      "kubernetes_version" => "1.33.1-do.0",
+      "cluster_subnet" => "10.240.0.0/16",
+      "service_subnet" => "10.241.0.0/19"
+    )
+    data.dig("spec", "layers", "infrastructure", "components")["gateway-api"] = {
+      "enabled" => true,
+      "values" => { "public" => { "enabled" => true, "hostname" => "app.example.com" } }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.infrastructure.components.gateway-api.values.acme is required when a Gateway profile has a hostname"
+  end
+
   def test_v2_rejects_gateway_profiles_when_gateway_api_is_disabled
     data = kubernetes_manifest
     data.dig("spec", "layers", "infrastructure", "components")["gateway-api"] = {

@@ -380,6 +380,10 @@ module OPSd
         .fetch(profile.to_s, {}).fetch("enabled", false) == true
     end
 
+    def kubernetes_gateway_values
+      kubernetes_component_values(layer: "infrastructure", component: "gateway-api")
+    end
+
     private
 
     def validate_common
@@ -579,7 +583,7 @@ module OPSd
       provider_values = {} unless provider_values.is_a?(Hash)
       profiles = deep_merge(values, provider_values)
       profiles.each_key do |profile|
-        errors << "#{prefix}.values.#{profile} is not supported" unless %w[public private].include?(profile.to_s)
+        errors << "#{prefix}.values.#{profile} is not supported" unless %w[public private acme].include?(profile.to_s)
       end
 
       profile_enabled = false
@@ -593,13 +597,46 @@ module OPSd
           next
         end
         profile_config.each_key do |key|
-          errors << "#{profile_prefix}.#{key} is not supported" unless key.to_s == "enabled"
+          errors << "#{profile_prefix}.#{key} is not supported" unless %w[enabled hostname tls_secret_name].include?(key.to_s)
         end
         if profile_config.key?("enabled") && ![true, false].include?(profile_config["enabled"])
           errors << "#{profile_prefix}.enabled must be a boolean"
         end
+        if profile_config.key?("hostname") && !valid_dns_name?(profile_config["hostname"])
+          errors << "#{profile_prefix}.hostname must be a valid DNS hostname"
+        end
+        if profile_config.key?("tls_secret_name") && !valid_kubernetes_name?(profile_config["tls_secret_name"])
+          errors << "#{profile_prefix}.tls_secret_name must be a valid Kubernetes resource name"
+        end
+        if profile_config.key?("hostname") && profile_config["enabled"] != true
+          errors << "#{profile_prefix}.hostname requires the Gateway profile to be enabled"
+        end
+        if profile_config.key?("tls_secret_name") && blank?(profile_config["hostname"])
+          errors << "#{profile_prefix}.tls_secret_name requires hostname"
+        end
         profile_enabled ||= profile_config["enabled"] == true
       end
+
+      acme = profiles["acme"]
+      if profiles.key?("acme")
+        if !acme.is_a?(Hash)
+          errors << "#{prefix}.values.acme must be a mapping"
+        else
+          acme.each_key do |key|
+            errors << "#{prefix}.values.acme.#{key} is not supported" unless %w[email server dns_token_secret_name].include?(key.to_s)
+          end
+          errors << "#{prefix}.values.acme.email must be a valid email address" unless acme["email"].to_s.match?(/\A[^\s@]+@[^\s@]+\.[^\s@]+\z/)
+          errors << "#{prefix}.values.acme.server must be production or staging" if acme.key?("server") && !%w[production staging].include?(acme["server"])
+          if acme.key?("dns_token_secret_name") && !valid_kubernetes_name?(acme["dns_token_secret_name"])
+            errors << "#{prefix}.values.acme.dns_token_secret_name must be a valid Kubernetes resource name"
+          end
+        end
+      end
+      tls_profiles = %w[public private].select do |profile|
+        profile_values = profiles[profile]
+        profile_values.is_a?(Hash) && profile_values["enabled"] == true && !blank?(profile_values["hostname"])
+      end
+      errors << "#{prefix}.values.acme is required when a Gateway profile has a hostname" if tls_profiles.any? && !acme.is_a?(Hash)
 
       if profile_enabled && component["enabled"] != true
         errors << "#{prefix}.enabled must be true when a Gateway profile is enabled"
@@ -642,6 +679,25 @@ module OPSd
         errors << "spec.compute_groups[0].config VPC-native subnets must not overlap vpc_ip_range"
       end
       errors
+    end
+
+    def valid_dns_name?(value)
+      return false unless value.is_a?(String)
+
+      name = value.to_s
+      return false if name.length > 253 || name.empty? || name.end_with?(".")
+      name = name.delete_prefix("*.")
+      return false if name.include?("*")
+
+      name.split(".").all? do |label|
+        label.length.between?(1, 63) && label.match?(/\A[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\z/i)
+      end
+    end
+
+    def valid_kubernetes_name?(value)
+      return false unless value.is_a?(String)
+
+      value.to_s.match?(/\A[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\z/) && value.to_s.length <= 253
     end
 
     def ipv4_cidr(value)
