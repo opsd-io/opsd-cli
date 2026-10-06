@@ -164,7 +164,7 @@ class KubernetesFoundationTest < Minitest::Test
       gateway = YAML.load_file(File.join(gateway_root, "public.yaml"))
       issuer = YAML.load_file(File.join(gateway_root, "certificates", "cluster-issuer.yaml"))
       certificate = YAML.load_file(File.join(gateway_root, "certificates", "public.yaml"))
-      cert_manager = YAML.load_file(File.join(gateway_root, "cert-manager.yaml"))
+      cert_manager = YAML.load_file(File.join(gateway_root, "certificates", "cert-manager.yaml"))
       infrastructure_project = YAML.load_file(File.join(output_path, "layers", "00-bootstrap", "argocd", "projects", "infrastructure.yaml"))
 
       https_listener = gateway.dig("spec", "listeners").find { |listener| listener["name"] == "https" }

@@ -214,7 +214,7 @@ module OPSd
 
       certificates_path = output_path.join("certificates")
       certificates_path.mkpath
-      output_path.join("cert-manager.yaml").write(YAML.dump(cert_manager_application))
+      certificates_path.join("cert-manager.yaml").write(YAML.dump(cert_manager_application))
       certificates_path.join("cluster-issuer.yaml").write(YAML.dump(gateway_cluster_issuer(manifest.kubernetes_gateway_values.fetch("acme"))))
       tls_profiles.each do |profile|
         profile_values = manifest.kubernetes_gateway_values.fetch(profile)
