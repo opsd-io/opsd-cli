@@ -39,8 +39,8 @@ OPSD_WORKSPACE_ROOT=/path/to/workspace bin/opsd list blueprints
 OPSD_WORKSPACE_ROOT=/path/to/workspace bin/opsd config profile current
 ```
 
-The workspace should contain `modules/<provider>/*` for the provider you want
-to use.
+The workspace is where OPSd materializes its managed modules. Keep client-owned
+modules under `modules/custom/`.
 
 ## 4. Verify The Result
 
@@ -60,6 +60,15 @@ OPSD_PROFILE=work bin/opsd describe blueprint kubernetes-foundation
 OPSD_PROFILE=work bin/opsd init blueprint kubernetes-foundation demo.yaml --variant kubernetes
 OPSD_PROFILE=work bin/opsd validate manifest demo.yaml
 OPSD_PROFILE=work bin/opsd render manifest demo.yaml --output live/
+```
+
+To render and qualify the Kubernetes platform path, synchronize the pinned
+module sources first. Helm must be available in `PATH`:
+
+```bash
+OPSD_PROFILE=work bin/opsd modules sync demo.yaml
+OPSD_PROFILE=work bin/opsd render manifest demo.yaml --output live/ --include-platform
+OPSD_PROFILE=work bin/opsd validate manifest demo.yaml --platform
 ```
 
 ## CI Coverage
