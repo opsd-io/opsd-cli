@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "digest"
 require "open3"
 require "pathname"
 require "rubygems"
@@ -48,6 +49,10 @@ module OPSd
 
       locked = load_lock(lockfile_path, provider)
       unless locked.nil?
+        if locked["tree_sha256"]
+          return resolve_synced_workspace(provider, locked)
+        end
+
         if local_workspace_lock?(locked)
           return resolve_local_workspace(
             provider,
@@ -151,6 +156,38 @@ module OPSd
         resolved_at: Time.now.utc.iso8601,
         workspace_root: @workspace_root
       }
+    end
+
+    def resolve_synced_workspace(provider, pin)
+      provider_root = local_provider_root(provider)
+      raise "Synchronized modules are missing for provider=#{provider}; run `opsd modules sync` first." unless provider_root.directory?
+
+      actual_tree = tree_digest(provider_root)
+      unless actual_tree == pin.fetch("tree_sha256")
+        raise "Synchronized modules changed for provider=#{provider}; restore the pinned tree or explicitly run `opsd modules sync --update`."
+      end
+
+      {
+        provider: provider,
+        repo: pin.fetch("repo"),
+        version: pin.fetch("version"),
+        commit: pin.fetch("commit"),
+        resolved_at: pin.fetch("resolved_at", Time.now.utc.iso8601),
+        workspace_root: @workspace_root,
+        synced: true
+      }
+    end
+
+    def tree_digest(root)
+      base = Pathname(root)
+      entries = base.glob("**/*", File::FNM_DOTMATCH).select(&:file?).sort
+      digest = Digest::SHA256.new
+      entries.each do |path|
+        digest.update(path.relative_path_from(base).to_s)
+        digest.update("\0")
+        digest.update(Digest::SHA256.file(path).digest)
+      end
+      digest.hexdigest
     end
 
     def resolve_remote_release(provider, repo_url:, version:, expected_commit: nil)

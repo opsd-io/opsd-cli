@@ -155,6 +155,36 @@ class ModuleCatalogTest < Minitest::Test
     end
   end
 
+  def test_resolve_uses_verified_synchronized_tree_without_fetching
+    Dir.mktmpdir("opsd-synced-module-") do |workspace|
+      provider_root = File.join(workspace, "modules", "digitalocean")
+      FileUtils.mkdir_p(provider_root)
+      FileUtils.mkdir_p(File.dirname(File.join(provider_root, "blueprints", "kubernetes-foundation.yaml")))
+      File.write(File.join(provider_root, "blueprints", "kubernetes-foundation.yaml"), base_blueprint("Synced"))
+      catalog = OPSd::ModuleCatalog.new(workspace_root: workspace, cache_root: File.join(workspace, ".cache"))
+      commit = "a" * 40
+      lock_path = File.join(workspace, "opsd.lock.yaml")
+      File.write(lock_path, YAML.dump(
+        "provider_modules" => {
+          "provider" => "digitalocean",
+          "repo" => "https://github.com/opsd-io/modules-digitalocean.git",
+          "version" => "v1.0.0",
+          "commit" => commit,
+          "tree_sha256" => catalog.send(:tree_digest, provider_root)
+        }
+      ))
+
+      resolved = catalog.resolve("digitalocean", lockfile_path: lock_path)
+      assert_equal workspace, resolved.fetch(:workspace_root).to_s
+      assert_equal commit, resolved.fetch(:commit)
+      assert_equal "v1.0.0", resolved.fetch(:version)
+
+      File.write(File.join(provider_root, "modified.tf"), "# drift\n")
+      error = assert_raises(RuntimeError) { catalog.resolve("digitalocean", lockfile_path: lock_path) }
+      assert_includes error.message, "Synchronized modules changed"
+    end
+  end
+
   def test_resolve_with_local_workspace_lock_reuses_local_workspace
     Dir.mktmpdir("opsd-module-catalog") do |root|
       workspace = File.join(root, "workspace")

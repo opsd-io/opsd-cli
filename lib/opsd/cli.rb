@@ -25,6 +25,7 @@ require_relative "provider_catalog_store"
 require_relative "version"
 require_relative "kubernetes_bootstrap"
 require_relative "modules_synchronizer"
+require_relative "platform_renderer"
 
 module OPSd
   class CLI
@@ -52,6 +53,7 @@ module OPSd
       add_node: %w[vm]
     }.freeze
     COMPLETION_OPTIONS = {
+      render: %w[--output --include-platform],
       resize: %w[--profile],
       scale: %w[--replicas],
       bootstrap: %w[--manifest],
@@ -634,27 +636,59 @@ module OPSd
 
       output = parse_output_flag
       raise "Missing required flag: --output <directory>" if output.nil?
+      include_platform = @argv.delete("--include-platform")
       raise "Usage: opsd render manifest <manifest.yaml> --output <directory>" unless @argv.empty?
 
       manifest = load_manifest(manifest_path)
       manifest.validate!
       capability_validator.validate!(manifest)
+      if include_platform && manifest.family != "kubernetes"
+        raise "The --include-platform option is supported for Kubernetes manifests only."
+      end
 
-      resolution = module_catalog.resolve(manifest.provider, lockfile_path: lock_path_for_manifest(manifest_path))
+      lock_path = Pathname(lock_path_for_manifest(manifest_path))
+      if include_platform && !lock_path.file?
+        raise "Kubernetes rendering requires a pinned opsd.lock.yaml; run `opsd modules sync #{Shellwords.escape(manifest_path)}` first."
+      end
+      if include_platform
+        ModulesSynchronizer.new(workspace_root: @workspace, env: ENV, module_catalog: module_catalog).verify(manifest_path:)
+      end
+      resolution = module_catalog.resolve(manifest.provider, lockfile_path: lock_path)
       module_lock = module_catalog.lock_data_for(resolution)
+      if lock_path.file?
+        existing_lock = YAML.load_file(lock_path)
+        module_lock = existing_lock.merge(module_lock) do |key, existing, generated|
+          key == "provider_modules" ? existing : generated
+        end
+      end
       scenario_id = Renderer.new(app_root: @app_root, workspace_root: resolution.fetch(:workspace_root)).render(
         manifest,
         output,
         module_lock: module_lock,
-        module_source: resolution
+        module_source: include_platform ? resolution : resolution.merge(synced: false)
       )
-      module_catalog.write_lock(lock_path_for_manifest(manifest_path), resolution)
+      if include_platform
+        PlatformRenderer.new(workspace_root: @workspace).render(
+          manifest:,
+          rendered_dir: output,
+          module_lock:
+        )
+      else
+        if existing_lock && existing_lock.key?("kubernetes_modules")
+          preserved_lock = existing_lock.merge(module_catalog.lock_data_for(resolution)) do |key, existing, generated|
+            key == "provider_modules" ? existing.merge(generated) : generated
+          end
+          lock_path.write(YAML.dump(preserved_lock))
+        else
+          module_catalog.write_lock(lock_path, resolution)
+        end
+      end
 
       puts "Rendered stack: #{output}"
       puts "Source scenario: #{scenario_id}"
       puts "Module release: #{resolution.fetch(:version)}"
       puts "Module commit: #{resolution.fetch(:commit)}"
-      puts "Lock file: #{lock_path_for_manifest(manifest_path)}"
+      puts "Lock file: #{lock_path}"
       puts
       puts "Next steps:"
       puts "  cd #{output}"
@@ -2859,12 +2893,13 @@ module OPSd
 
     def render_usage
       help_block(
-        "Usage: opsd render manifest <manifest.yaml> --output <directory>",
+        "Usage: opsd render manifest <manifest.yaml> --output <directory> [--include-platform]",
         [
           [
             "Options",
             [
-              ["--output <directory>", "Write the runnable OpenTofu stack to this directory"]
+              ["--output <directory>", "Write the runnable OpenTofu stack to this directory"],
+              ["--include-platform", "Render enabled Helm charts from the locked local artifacts"]
             ]
           ]
         ]
