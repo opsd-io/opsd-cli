@@ -111,6 +111,18 @@ class ManifestValidationTest < Minitest::Test
     assert_includes error.errors, "spec.layers.infrastructure.components.external-dns is currently supported only for the digitalocean provider"
   end
 
+  def test_v2_accepts_external_secrets_operator_component
+    data = kubernetes_manifest
+    data.dig("spec", "layers", "infrastructure", "components")["external-secrets"] = {
+      "enabled" => true
+    }
+
+    manifest = OPSd::Manifest.new(data)
+    manifest.validate!
+
+    assert_equal true, manifest.kubernetes_external_secrets_enabled?
+  end
+
   def test_v2_requires_acme_settings_for_gateway_hostname
     data = kubernetes_manifest
     data.dig("spec", "compute_groups", 0, "config").merge!(

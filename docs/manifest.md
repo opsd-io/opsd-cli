@@ -601,6 +601,29 @@ spec:
   hostnames: [app.example.com]
 ```
 
+### External Secrets Operator
+
+Enable External Secrets Operator in the infrastructure layer to render an
+Argo CD Application for the pinned chart and its CRDs:
+
+```yaml
+layers:
+  infrastructure:
+    enabled: true
+    components:
+      external-secrets:
+        enabled: true
+```
+
+OPSd installs the operator but does not create a `SecretStore`, remote secret,
+or backend credential. Add the `SecretStore` and `ExternalSecret` resources to
+your GitOps source. For the experimental DigitalOcean Secrets Manager webhook
+path, including manual token bootstrap and its API limitations, follow the
+[External Secrets module integration guide](https://github.com/opsd-io/modules-kubernetes/blob/main/modules/infrastructure/external-secrets/README.md).
+Do not put bootstrap tokens in the OPSd manifest. SOPS-encrypted Kubernetes
+Secret manifests remain an optional alternative when the experimental webhook
+path is unsuitable.
+
 ### Per-resource destroy protection
 
 Resources can opt into explicit destroy protection:

@@ -388,6 +388,10 @@ module OPSd
       kubernetes_component_values(layer: "infrastructure", component: "external-dns")
     end
 
+    def kubernetes_external_secrets_enabled?
+      kubernetes_component_enabled?(layer: "infrastructure", component: "external-secrets")
+    end
+
     private
 
     def validate_common
