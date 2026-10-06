@@ -25,6 +25,65 @@ class ManifestValidationTest < Minitest::Test
     assert_equal true, OPSd::Manifest.new(data).layers.dig("infrastructure", "enabled")
   end
 
+  def test_v2_accepts_independent_gateway_profiles
+    data = kubernetes_manifest
+    data.dig("spec", "compute_groups", 0, "config").merge!(
+      "kubernetes_version" => "1.33.1-do.0",
+      "cluster_subnet" => "10.240.0.0/16",
+      "service_subnet" => "10.241.0.0/19"
+    )
+    data.dig("spec", "layers", "infrastructure", "components")["gateway-api"] = {
+      "enabled" => true,
+      "values" => {
+        "public" => { "enabled" => true },
+        "private" => { "enabled" => false }
+      }
+    }
+    manifest = OPSd::Manifest.new(data)
+
+    manifest.validate!
+
+    assert_equal true, manifest.kubernetes_gateway_profile_enabled?(profile: "public")
+    assert_equal false, manifest.kubernetes_gateway_profile_enabled?(profile: "private")
+  end
+
+  def test_v2_rejects_gateway_profiles_when_gateway_api_is_disabled
+    data = kubernetes_manifest
+    data.dig("spec", "layers", "infrastructure", "components")["gateway-api"] = {
+      "enabled" => false,
+      "values" => { "public" => { "enabled" => true } }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.infrastructure.components.gateway-api.enabled must be true when a Gateway profile is enabled"
+  end
+
+  def test_v2_rejects_gateway_profile_enabled_by_provider_override_when_component_is_disabled
+    data = kubernetes_manifest
+    data.dig("spec", "layers", "infrastructure", "components")["gateway-api"] = {
+      "enabled" => false,
+      "provider_overrides" => { "digitalocean" => { "values" => { "public" => { "enabled" => true } } } }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.infrastructure.components.gateway-api.enabled must be true when a Gateway profile is enabled"
+  end
+
+  def test_v2_rejects_invalid_gateway_profile_configuration
+    data = kubernetes_manifest
+    data.dig("spec", "layers", "infrastructure", "components")["gateway-api"] = {
+      "enabled" => true,
+      "values" => { "public" => { "enabled" => "yes" }, "internal" => { "enabled" => true } }
+    }
+
+    error = assert_raises(OPSd::Manifest::ValidationError) { OPSd::Manifest.new(data).validate! }
+
+    assert_includes error.errors, "spec.layers.infrastructure.components.gateway-api.values.public.enabled must be a boolean"
+    assert_includes error.errors, "spec.layers.infrastructure.components.gateway-api.values.internal is not supported"
+  end
+
   def test_kubernetes_gitops_repository_defaults_revision_to_main
     data = kubernetes_manifest
     data.dig("spec", "compute_groups", 0, "delivery", "source", "github").delete("revision")

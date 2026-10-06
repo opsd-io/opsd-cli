@@ -375,6 +375,11 @@ module OPSd
       layers.fetch(layer.to_s, {}).fetch("components", {}).fetch(component.to_s, {}).fetch("enabled", false) == true
     end
 
+    def kubernetes_gateway_profile_enabled?(profile:)
+      kubernetes_component_values(layer: "infrastructure", component: "gateway-api")
+        .fetch(profile.to_s, {}).fetch("enabled", false) == true
+    end
+
     private
 
     def validate_common
@@ -565,9 +570,42 @@ module OPSd
     end
 
     def validate_v2_gateway_api_component(component, prefix)
-      return [] unless component.is_a?(Hash) && component["enabled"] == true
+      return [] unless component.is_a?(Hash)
 
       errors = []
+      values = component["values"].is_a?(Hash) ? component["values"] : {}
+      overrides = component["provider_overrides"]
+      provider_values = overrides.is_a?(Hash) ? overrides.dig(provider, "values") : nil
+      provider_values = {} unless provider_values.is_a?(Hash)
+      profiles = deep_merge(values, provider_values)
+      profiles.each_key do |profile|
+        errors << "#{prefix}.values.#{profile} is not supported" unless %w[public private].include?(profile.to_s)
+      end
+
+      profile_enabled = false
+      %w[public private].each do |profile|
+        profile_prefix = "#{prefix}.values.#{profile}"
+        profile_config = profiles[profile]
+        next if profile_config.nil?
+
+        unless profile_config.is_a?(Hash)
+          errors << "#{profile_prefix} must be a mapping"
+          next
+        end
+        profile_config.each_key do |key|
+          errors << "#{profile_prefix}.#{key} is not supported" unless key.to_s == "enabled"
+        end
+        if profile_config.key?("enabled") && ![true, false].include?(profile_config["enabled"])
+          errors << "#{profile_prefix}.enabled must be a boolean"
+        end
+        profile_enabled ||= profile_config["enabled"] == true
+      end
+
+      if profile_enabled && component["enabled"] != true
+        errors << "#{prefix}.enabled must be true when a Gateway profile is enabled"
+      end
+      return errors unless component["enabled"] == true
+
       errors << "#{prefix} is supported only for the digitalocean provider" unless provider == "digitalocean"
 
       config = primary_kubernetes_config
