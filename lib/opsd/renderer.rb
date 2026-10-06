@@ -203,17 +203,54 @@ module OPSd
       output_path = layer_root.join("10-infrastructure", "gateways")
       output_path.mkpath
       profiles.each do |profile|
-        output_path.join("#{profile}.yaml").write(YAML.dump(gateway_resource(profile)))
+        profile_values = manifest.kubernetes_gateway_values.fetch(profile, {})
+        output_path.join("#{profile}.yaml").write(YAML.dump(gateway_resource(profile, profile_values)))
+      end
+
+      tls_profiles = profiles.select do |profile|
+        !blank?(manifest.kubernetes_gateway_values.dig(profile, "hostname"))
+      end
+      return if tls_profiles.empty?
+
+      certificates_path = output_path.join("certificates")
+      certificates_path.mkpath
+      output_path.join("cert-manager.yaml").write(YAML.dump(cert_manager_application))
+      certificates_path.join("cluster-issuer.yaml").write(YAML.dump(gateway_cluster_issuer(manifest.kubernetes_gateway_values.fetch("acme"))))
+      tls_profiles.each do |profile|
+        profile_values = manifest.kubernetes_gateway_values.fetch(profile)
+        certificates_path.join("#{profile}.yaml").write(YAML.dump(gateway_certificate(profile, profile_values)))
       end
     end
 
-    def gateway_resource(profile)
+    def gateway_resource(profile, profile_values = {})
+      listeners = [
+        {
+          "name" => "http",
+          "protocol" => "HTTP",
+          "port" => 80,
+          "allowedRoutes" => { "namespaces" => { "from" => "All" } }
+        }
+      ]
+      unless blank?(profile_values["hostname"])
+        listeners << {
+          "name" => "https",
+          "hostname" => profile_values.fetch("hostname"),
+          "protocol" => "HTTPS",
+          "port" => 443,
+          "tls" => {
+            "mode" => "Terminate",
+            "certificateRefs" => [{ "kind" => "Secret", "name" => gateway_tls_secret_name(profile, profile_values) }]
+          },
+          "allowedRoutes" => { "namespaces" => { "from" => "All" } }
+        }
+      end
       gateway = {
         "apiVersion" => "gateway.networking.k8s.io/v1",
         "kind" => "Gateway",
         "metadata" => {
           "name" => "opsd-#{profile}-gateway",
           "namespace" => "default",
+          "annotations" => { "argocd.argoproj.io/sync-wave" => "2" },
           "labels" => {
             "app.kubernetes.io/managed-by" => "opsd",
             "opsd.io/profile" => profile
@@ -221,14 +258,7 @@ module OPSd
         },
         "spec" => {
           "gatewayClassName" => "cilium",
-          "listeners" => [
-            {
-              "name" => "http",
-              "protocol" => "HTTP",
-              "port" => 80,
-              "allowedRoutes" => { "namespaces" => { "from" => "All" } }
-            }
-          ]
+          "listeners" => listeners
         }
       }
       if profile == "private"
@@ -239,13 +269,107 @@ module OPSd
       gateway
     end
 
+    def gateway_cluster_issuer(acme)
+      {
+        "apiVersion" => "cert-manager.io/v1",
+        "kind" => "ClusterIssuer",
+        "metadata" => {
+          "name" => "opsd-letsencrypt",
+          "annotations" => { "argocd.argoproj.io/sync-wave" => "1" }
+        },
+        "spec" => {
+          "acme" => {
+            "email" => acme.fetch("email"),
+            "server" => acme.fetch("server", "production") == "staging" ?
+              "https://acme-staging-v02.api.letsencrypt.org/directory" :
+              "https://acme-v02.api.letsencrypt.org/directory",
+            "privateKeySecretRef" => { "name" => "opsd-letsencrypt-account" },
+            "solvers" => [
+              {
+                "dns01" => {
+                  "digitalocean" => {
+                    "tokenSecretRef" => {
+                      "name" => acme.fetch("dns_token_secret_name", "digitalocean-dns"),
+                      "key" => "access-token"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    end
+
+    def cert_manager_application
+      {
+        "apiVersion" => "argoproj.io/v1alpha1",
+        "kind" => "Application",
+        "metadata" => {
+          "name" => "opsd-cert-manager",
+          "namespace" => "argocd",
+          "annotations" => { "argocd.argoproj.io/sync-wave" => "0" }
+        },
+        "spec" => {
+          "project" => "infrastructure",
+          "source" => {
+            "repoURL" => "https://charts.jetstack.io",
+            "chart" => "cert-manager",
+            "targetRevision" => "v1.21.2",
+            "helm" => { "values" => "crds:\n  enabled: true\n" }
+          },
+          "destination" => {
+            "server" => "https://kubernetes.default.svc",
+            "namespace" => "cert-manager"
+          },
+          "syncPolicy" => {
+            "automated" => { "prune" => true, "selfHeal" => true },
+            "syncOptions" => ["CreateNamespace=true"]
+          }
+        }
+      }
+    end
+
+    def gateway_certificate(profile, profile_values)
+      {
+        "apiVersion" => "cert-manager.io/v1",
+        "kind" => "Certificate",
+        "metadata" => {
+          "name" => "opsd-#{profile}-gateway",
+          "namespace" => "default",
+          "annotations" => { "argocd.argoproj.io/sync-wave" => "1" }
+        },
+        "spec" => {
+          "secretName" => gateway_tls_secret_name(profile, profile_values),
+          "dnsNames" => [profile_values.fetch("hostname")],
+          "issuerRef" => { "name" => "opsd-letsencrypt", "kind" => "ClusterIssuer" }
+        }
+      }
+    end
+
+    def gateway_tls_secret_name(profile, profile_values)
+      profile_values.fetch("tls_secret_name", "opsd-#{profile}-gateway-tls")
+    end
+
+    def gateway_tls_enabled?(manifest)
+      %w[public private].any? do |profile|
+        manifest.kubernetes_gateway_profile_enabled?(profile:) &&
+          !blank?(manifest.kubernetes_gateway_values.dig(profile, "hostname"))
+      end
+    end
+
     def generate_argocd_bootstrap(output_path, manifest, gitops_repository:)
       bootstrap_path = output_path.join("layers", "00-bootstrap", "argocd")
       projects_path = bootstrap_path.join("projects")
       projects_path.mkpath
 
       manifest.kubernetes_layer_plan.each do |layer|
-        project = argocd_project(layer, gitops_repository.fetch("repository_url"))
+        project = argocd_project(
+          layer,
+          gitops_repository.fetch("repository_url"),
+          allow_cert_manager: layer.fetch("id") == "infrastructure" &&
+            gateway_tls_enabled?(manifest)
+        )
         filename = "#{layer.fetch('id')}.yaml"
         projects_path.join(filename).write(YAML.dump(project))
         application = argocd_layer_application(layer, gitops_repository)
@@ -362,7 +486,7 @@ module OPSd
       }
     end
 
-    def argocd_project(layer, repository_url)
+    def argocd_project(layer, repository_url, allow_cert_manager: false)
       bootstrap = layer.fetch("id") == "bootstrap"
       project = {
         "apiVersion" => "argoproj.io/v1alpha1",
@@ -377,7 +501,7 @@ module OPSd
         },
         "spec" => {
           "description" => layer.fetch("description"),
-          "sourceRepos" => [repository_url],
+          "sourceRepos" => [repository_url, *(["https://charts.jetstack.io"] if allow_cert_manager)],
           "destinations" => [
             {
               "server" => "https://kubernetes.default.svc",

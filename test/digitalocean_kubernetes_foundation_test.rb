@@ -128,6 +128,60 @@ class KubernetesFoundationTest < Minitest::Test
     end
   end
 
+  def test_kubernetes_foundation_renders_digitalocean_dns_certificates_and_gateway_tls
+    manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+    manifest_data.dig("spec", "compute_groups", 0, "config").merge!(
+      "kubernetes_version" => "1.33.1-do.0",
+      "cluster_subnet" => "10.240.0.0/16",
+      "service_subnet" => "10.241.0.0/19"
+    )
+    manifest_data.dig("spec", "layers", "infrastructure", "components")["gateway-api"] = {
+      "enabled" => true,
+      "values" => {
+        "acme" => { "email" => "platform@example.com", "server" => "staging" },
+        "public" => { "enabled" => true, "hostname" => "app.example.com" }
+      }
+    }
+    manifest = OPSd::Manifest.new(manifest_data)
+    manifest.validate!
+
+    Dir.mktmpdir("opsd-gateway-certificate-render") do |output_dir|
+      output_path = File.join(output_dir, "generated")
+      OPSd::Renderer.new(
+        app_root: File.expand_path("..", __dir__),
+        workspace_root: output_dir
+      ).render(
+        manifest,
+        output_path,
+        module_source: {
+          repo: "https://github.com/opsd-io/modules-digitalocean.git",
+          version: "v1.0.0",
+          commit: "abcdef1234567890abcdef1234567890abcdef12"
+        }
+      )
+
+      gateway_root = File.join(output_path, "layers", "10-infrastructure", "gateways")
+      gateway = YAML.load_file(File.join(gateway_root, "public.yaml"))
+      issuer = YAML.load_file(File.join(gateway_root, "certificates", "cluster-issuer.yaml"))
+      certificate = YAML.load_file(File.join(gateway_root, "certificates", "public.yaml"))
+      cert_manager = YAML.load_file(File.join(gateway_root, "cert-manager.yaml"))
+      infrastructure_project = YAML.load_file(File.join(output_path, "layers", "00-bootstrap", "argocd", "projects", "infrastructure.yaml"))
+
+      https_listener = gateway.dig("spec", "listeners").find { |listener| listener["name"] == "https" }
+      assert_equal "app.example.com", https_listener.fetch("hostname")
+      assert_equal "Terminate", https_listener.dig("tls", "mode")
+      assert_equal "opsd-public-gateway-tls", https_listener.dig("tls", "certificateRefs", 0, "name")
+      assert_equal "https://acme-staging-v02.api.letsencrypt.org/directory", issuer.dig("spec", "acme", "server")
+      assert_equal "digitalocean", issuer.dig("spec", "acme", "solvers", 0, "dns01").keys.first
+      assert_equal "digitalocean-dns", issuer.dig("spec", "acme", "solvers", 0, "dns01", "digitalocean", "tokenSecretRef", "name")
+      assert_equal "opsd-public-gateway-tls", certificate.dig("spec", "secretName")
+      assert_equal "app.example.com", certificate.dig("spec", "dnsNames", 0)
+      assert_equal "cert-manager", cert_manager.dig("spec", "destination", "namespace")
+      assert_equal "v1.21.2", cert_manager.dig("spec", "source", "targetRevision")
+      assert_includes infrastructure_project.dig("spec", "sourceRepos"), "https://charts.jetstack.io"
+    end
+  end
+
   def test_kubernetes_foundation_renders_public_and_private_gateways_independently
     %w[public private].each do |profile|
       manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
