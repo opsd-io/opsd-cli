@@ -7,6 +7,7 @@ require "pathname"
 require "tmpdir"
 require "yaml"
 
+require_relative "kubernetes_module"
 require_relative "module_catalog"
 
 module OPSd
@@ -32,15 +33,19 @@ module OPSd
       provider = YAML.load_file(manifest_path).dig("spec", "provider").to_s
       provider_lock = resolve_provider_pin(provider, previous_lock, update)
       kubernetes_lock = resolve_kubernetes_pin(previous_lock, update)
+      kubernetes_root = repository_source_root("kubernetes", kubernetes_lock)
+      chart_locks = chart_metadata(kubernetes_root)
 
       lock = (previous_lock || {}).merge(
         "provider_modules" => provider_lock,
-        "kubernetes_modules" => kubernetes_lock
+        "kubernetes_modules" => kubernetes_lock,
+        "helm_charts" => chart_locks
       )
 
       validate_destinations!(lock, previous_lock)
+      cache_charts!(chart_locks)
       sync_repository("digitalocean", provider_lock, provider_source_root(provider, provider_lock), previous_lock)
-      sync_repository("kubernetes", kubernetes_lock, repository_source_root("kubernetes", kubernetes_lock), previous_lock)
+      sync_repository("kubernetes", kubernetes_lock, kubernetes_root, previous_lock)
       write_lock(lock_path, lock)
       lock
     end
@@ -59,6 +64,17 @@ module OPSd
         end
       end
 
+      actual_charts = chart_metadata(@workspace_root.join("modules", "kubernetes"))
+      expected_charts = Array(lock["helm_charts"])
+      unless canonicalize(actual_charts) == canonicalize(expected_charts)
+        raise "Kubernetes Helm chart metadata does not match opsd.lock.yaml; run `opsd modules sync --update`."
+      end
+      expected_charts.each do |chart|
+        archive = @cache_root.join("helm", "#{chart.fetch('digest').delete_prefix('sha256:')}.tgz")
+        raise "Cached Helm chart is missing for #{chart.fetch('module')}; run `opsd modules sync`." unless archive.file?
+
+        verify_digest!(chart, archive)
+      end
       lock
     end
 
@@ -140,6 +156,53 @@ module OPSd
       clone_at(pin, name, destination: cached_source_path(name, pin))
     end
 
+    def chart_metadata(kubernetes_root)
+      Dir.glob(kubernetes_root.join("modules", "**", "module.yaml")).sort.filter_map do |path|
+        module_data = KubernetesModule.load(path)
+        module_data.validate!
+        source = module_data.data.dig("spec", "source")
+        next unless %w[helm oci].include?(source.fetch("type"))
+
+        {
+          "module" => module_data.data.dig("metadata", "id"),
+          "repository" => source["repository"] || source["registry"],
+          "chart" => source.fetch("chart"),
+          "version" => source.fetch("version"),
+          "digest" => source.fetch("digest")
+        }
+      end
+    end
+
+    def cache_charts!(charts)
+      charts.each do |chart|
+        archive = @cache_root.join("helm", "#{chart.fetch('digest').delete_prefix('sha256:')}.tgz")
+        if archive.file?
+          verify_digest!(chart, archive)
+          next
+        end
+
+        archive.dirname.mkpath
+        Dir.mktmpdir("opsd-helm-") do |directory|
+          repository = chart.fetch("repository")
+          source = repository.start_with?("oci://") ? File.join(repository, chart.fetch("chart")) : chart.fetch("chart")
+          command = ["helm", "pull", source, "--version", chart.fetch("version"), "--destination", directory]
+          command.insert(2, "--repo", repository) unless repository.start_with?("oci://")
+          stdout, stderr, status = Open3.capture3(@env, *command)
+          raise "Unable to download Helm chart #{chart.fetch('chart')}: #{stderr.empty? ? stdout : stderr}" unless status.success?
+
+          downloaded = Pathname(directory).join("#{chart.fetch('chart')}-#{chart.fetch('version')}.tgz")
+          verify_digest!(chart, downloaded)
+          FileUtils.mv(downloaded, archive)
+        end
+      end
+    end
+
+    def verify_digest!(chart, archive)
+      actual = "sha256:#{Digest::SHA256.file(archive).hexdigest}"
+      expected = chart.fetch("digest")
+      raise "Helm chart digest mismatch for #{chart.fetch('module')}: expected #{expected}, got #{actual}" unless actual == expected
+    end
+
     def sync_repository(name, pin, source_root, previous_lock)
       destination = @workspace_root.join("modules", name)
       old_pin = previous_lock && previous_lock[REPOSITORIES.fetch(name)]
@@ -202,6 +265,14 @@ module OPSd
         digest.update(Digest::SHA256.file(path).digest)
       end
       digest.hexdigest
+    end
+
+    def canonicalize(value)
+      case value
+      when Hash then value.sort.to_h { |key, item| [key, canonicalize(item)] }
+      when Array then value.map { |item| canonicalize(item) }
+      else value
+      end
     end
 
     def read_lock(path)

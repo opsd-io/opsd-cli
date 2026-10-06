@@ -683,6 +683,7 @@ module OPSd
       puts "Synchronized OPSd modules into #{@workspace}"
       puts "DigitalOcean modules: #{lock.dig('provider_modules', 'version')} (#{lock.dig('provider_modules', 'commit')})"
       puts "Kubernetes modules: #{lock.dig('kubernetes_modules', 'version')} (#{lock.dig('kubernetes_modules', 'commit')})"
+      puts "Pinned Helm charts: #{Array(lock['helm_charts']).length}"
       puts "Lock file: #{Pathname(manifest_path).expand_path.dirname.join('opsd.lock.yaml')}"
     end
 
@@ -2843,13 +2844,13 @@ module OPSd
           [
             "Commands",
             [
-              ["sync", "Materialize the pinned DigitalOcean and Kubernetes modules"]
+              ["sync", "Materialize pinned modules and cache their Helm charts"]
             ]
           ],
           [
             "Options",
             [
-              ["--update", "Resolve current refs and explicitly update the module pins"]
+              ["--update", "Resolve current refs and explicitly update module and chart pins"]
             ]
           ]
         ]
