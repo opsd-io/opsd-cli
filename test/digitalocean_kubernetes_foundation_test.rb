@@ -261,6 +261,37 @@ class KubernetesFoundationTest < Minitest::Test
     end
   end
 
+  def test_kubernetes_foundation_renders_external_secrets_operator_when_enabled
+    manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
+    manifest_data.dig("spec", "layers", "infrastructure", "components")["external-secrets"] = {
+      "enabled" => true
+    }
+    manifest = OPSd::Manifest.new(manifest_data)
+    manifest.validate!
+
+    Dir.mktmpdir("opsd-external-secrets") do |workspace|
+      output_path = File.join(workspace, "generated")
+      OPSd::Renderer.new(
+        app_root: File.expand_path("..", __dir__),
+        workspace_root: workspace
+      ).render(manifest, output_path)
+
+      app_path = File.join(output_path, "layers", "10-infrastructure", "external-secrets.yaml")
+      app = YAML.load_file(app_path)
+      values = YAML.safe_load(app.dig("spec", "source", "helm", "values"))
+      infra_project = YAML.load_file(File.join(output_path, "layers", "00-bootstrap", "argocd", "projects", "infrastructure.yaml"))
+
+      assert_equal "external-secrets", app.dig("spec", "source", "chart")
+      assert_equal "https://charts.external-secrets.io", app.dig("spec", "source", "repoURL")
+      assert_equal "2.12.0", app.dig("spec", "source", "targetRevision")
+      assert_equal "external-secrets", app.dig("spec", "destination", "namespace")
+      assert_equal true, values.fetch("installCRDs")
+      assert_equal ["CreateNamespace=true"], app.dig("spec", "syncPolicy", "syncOptions")
+      assert_includes infra_project.dig("spec", "sourceRepos"), "https://charts.external-secrets.io"
+      refute_includes File.read(app_path), "accessToken"
+    end
+  end
+
   def test_kubernetes_foundation_renders_enabled_bastion_and_control_plane_sources
     manifest_data = YAML.load_file(File.expand_path("../examples/kubernetes-environment.yaml", __dir__))
     manifest_data["spec"]["layers"]["infrastructure"] = {

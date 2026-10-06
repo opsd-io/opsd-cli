@@ -130,6 +130,7 @@ module OPSd
 
       generate_gateway_profiles(layer_root, manifest)
       generate_external_dns(layer_root, manifest) if manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "external-dns")
+      generate_external_secrets(layer_root) if manifest.kubernetes_external_secrets_enabled?
       generate_argocd_bootstrap(output_path, manifest, gitops_repository:) if gitops_repository
     end
 
@@ -139,6 +140,7 @@ module OPSd
                            %w[public private].any? { |profile| manifest.kubernetes_gateway_profile_enabled?(profile:) }
       generated_external_dns = layer.fetch("id") == "infrastructure" &&
                                manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "external-dns")
+      generated_external_secrets = layer.fetch("id") == "infrastructure" && manifest.kubernetes_external_secrets_enabled?
       next_step = if generated_bootstrap
                     bootstrap_manifest_path = Shellwords.escape(
                       File.join(gitops_repository.fetch("environment_path"), "layers", "00-bootstrap", "argocd")
@@ -178,6 +180,11 @@ module OPSd
                     <<~DETAIL
 
                       ExternalDNS is configured under `layers/10-infrastructure/external-dns.yaml`. Set a unique TXT owner ID and domain filters in the OPSd manifest, then create the `external-dns` namespace Secret named in the component values with key `access-token` before syncing.
+                    DETAIL
+                  elsif generated_external_secrets
+                    <<~DETAIL
+
+                      External Secrets Operator is configured under `layers/10-infrastructure/external-secrets.yaml`. The operator is installed with its CRDs; create and label bootstrap credentials in the namespace of each `SecretStore`, then apply the `SecretStore` and `ExternalSecret` resources. See the [module integration guide](https://github.com/opsd-io/modules-kubernetes/blob/main/modules/infrastructure/external-secrets/README.md) for the experimental DigitalOcean Secrets Manager webhook example and its limitations.
                     DETAIL
                   elsif generated_gateways
                     if gitops_repository
@@ -298,6 +305,38 @@ module OPSd
         }
       }
       output_path = layer_root.join("10-infrastructure", "external-dns.yaml")
+      output_path.dirname.mkpath
+      output_path.write(YAML.dump(application))
+    end
+
+    def generate_external_secrets(layer_root)
+      application = {
+        "apiVersion" => "argoproj.io/v1alpha1",
+        "kind" => "Application",
+        "metadata" => {
+          "name" => "opsd-external-secrets",
+          "namespace" => "argocd",
+          "annotations" => { "argocd.argoproj.io/sync-wave" => "0" }
+        },
+        "spec" => {
+          "project" => "infrastructure",
+          "source" => {
+            "repoURL" => "https://charts.external-secrets.io",
+            "chart" => "external-secrets",
+            "targetRevision" => "2.12.0",
+            "helm" => { "values" => YAML.dump("installCRDs" => true) }
+          },
+          "destination" => {
+            "server" => "https://kubernetes.default.svc",
+            "namespace" => "external-secrets"
+          },
+          "syncPolicy" => {
+            "automated" => { "prune" => true, "selfHeal" => true },
+            "syncOptions" => ["CreateNamespace=true"]
+          }
+        }
+      }
+      output_path = layer_root.join("10-infrastructure", "external-secrets.yaml")
       output_path.dirname.mkpath
       output_path.write(YAML.dump(application))
     end
@@ -450,7 +489,9 @@ module OPSd
           allow_cert_manager: layer.fetch("id") == "infrastructure" &&
             gateway_tls_enabled?(manifest),
           allow_external_dns: layer.fetch("id") == "infrastructure" &&
-            manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "external-dns")
+            manifest.kubernetes_component_enabled?(layer: "infrastructure", component: "external-dns"),
+          allow_external_secrets: layer.fetch("id") == "infrastructure" &&
+            manifest.kubernetes_external_secrets_enabled?
         )
         filename = "#{layer.fetch('id')}.yaml"
         projects_path.join(filename).write(YAML.dump(project))
@@ -568,7 +609,7 @@ module OPSd
       }
     end
 
-    def argocd_project(layer, repository_url, allow_cert_manager: false, allow_external_dns: false)
+    def argocd_project(layer, repository_url, allow_cert_manager: false, allow_external_dns: false, allow_external_secrets: false)
       bootstrap = layer.fetch("id") == "bootstrap"
       project = {
         "apiVersion" => "argoproj.io/v1alpha1",
@@ -583,7 +624,7 @@ module OPSd
         },
         "spec" => {
           "description" => layer.fetch("description"),
-          "sourceRepos" => [repository_url, *(["https://charts.jetstack.io"] if allow_cert_manager), *(["https://kubernetes-sigs.github.io/external-dns/"] if allow_external_dns)],
+          "sourceRepos" => [repository_url, *(["https://charts.jetstack.io"] if allow_cert_manager), *(["https://kubernetes-sigs.github.io/external-dns/"] if allow_external_dns), *(["https://charts.external-secrets.io"] if allow_external_secrets)],
           "destinations" => [
             {
               "server" => "https://kubernetes.default.svc",
