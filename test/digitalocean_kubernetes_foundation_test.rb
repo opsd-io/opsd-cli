@@ -11,6 +11,22 @@ require "opsd/renderer"
 require "opsd/template_store"
 
 class KubernetesFoundationTest < Minitest::Test
+  def test_verified_module_sync_uses_local_relative_sources
+    renderer = OPSd::Renderer.new(app_root: File.expand_path("..", __dir__), workspace_root: "/workspace")
+    source = "/workspace/modules/digitalocean//modules/vpc"
+
+    rendered = renderer.send(
+      :externalize_module_sources,
+      %(source = "#{source}"),
+      { repo: "https://github.com/opsd-io/modules-digitalocean.git", version: "v1.0.0", synced: true },
+      "/workspace/modules/digitalocean",
+      output_path: "/workspace/environments/production"
+    )
+
+    assert_includes rendered, "../../modules/digitalocean/modules/vpc"
+    refute_includes rendered, "git::"
+  end
+
   def test_provider_catalog_exposes_only_the_current_foundation_blueprint
     Dir.mktmpdir("opsd-foundation-catalog") do |workspace|
       blueprint_root = File.join(workspace, "modules", "digitalocean", "blueprints")

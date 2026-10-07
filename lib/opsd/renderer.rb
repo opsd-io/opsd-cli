@@ -8,6 +8,7 @@ require "json"
 require "shellwords"
 
 require_relative "composer_store"
+require_relative "kubernetes_module"
 require_relative "render_provider_catalog"
 
 module OPSd
@@ -95,7 +96,7 @@ module OPSd
       stack_id = manifest.composer_stack || template_name
 
       main_tf = ERB.new(template_root.join("main.tf.erb").read, trim_mode: "-").result(binding)
-      main_tf = externalize_module_sources(main_tf, module_source, module_package_root)
+      main_tf = externalize_module_sources(main_tf, module_source, module_package_root, output_path:)
       readme = ERB.new(template_root.join("README.md.erb").read, trim_mode: "-").result(binding)
       scenario_json = ERB.new(template_root.join("scenario.json.erb").read, trim_mode: "-").result(binding)
 
@@ -289,9 +290,9 @@ module OPSd
         "spec" => {
           "project" => "infrastructure",
           "source" => {
-            "repoURL" => "https://kubernetes-sigs.github.io/external-dns/",
-            "chart" => "external-dns",
-            "targetRevision" => "1.23.0",
+            "repoURL" => helm_source("external-dns", repository: "https://kubernetes-sigs.github.io/external-dns/").fetch("repository"),
+            "chart" => helm_source("external-dns", repository: "https://kubernetes-sigs.github.io/external-dns/").fetch("chart"),
+            "targetRevision" => helm_source("external-dns", repository: "https://kubernetes-sigs.github.io/external-dns/").fetch("version"),
             "helm" => { "values" => YAML.dump(helm_values) }
           },
           "destination" => {
@@ -321,9 +322,9 @@ module OPSd
         "spec" => {
           "project" => "infrastructure",
           "source" => {
-            "repoURL" => "https://charts.external-secrets.io",
-            "chart" => "external-secrets",
-            "targetRevision" => "2.12.0",
+            "repoURL" => helm_source("external-secrets", repository: "https://charts.external-secrets.io").fetch("repository"),
+            "chart" => helm_source("external-secrets", repository: "https://charts.external-secrets.io").fetch("chart"),
+            "targetRevision" => helm_source("external-secrets", repository: "https://charts.external-secrets.io").fetch("version"),
             "helm" => { "values" => YAML.dump("installCRDs" => true) }
           },
           "destination" => {
@@ -432,9 +433,9 @@ module OPSd
         "spec" => {
           "project" => "infrastructure",
           "source" => {
-            "repoURL" => "https://charts.jetstack.io",
-            "chart" => "cert-manager",
-            "targetRevision" => "v1.21.2",
+            "repoURL" => helm_source("cert-manager", repository: "https://charts.jetstack.io").fetch("repository"),
+            "chart" => helm_source("cert-manager", repository: "https://charts.jetstack.io").fetch("chart"),
+            "targetRevision" => helm_source("cert-manager", repository: "https://charts.jetstack.io").fetch("version"),
             "helm" => { "values" => "crds:\n  enabled: true\n" }
           },
           "destination" => {
@@ -447,6 +448,30 @@ module OPSd
           }
         }
       }
+    end
+
+    def helm_source(module_id, repository:)
+      module_root = @workspace_root.join("modules", "kubernetes")
+      metadata_path = module_root.glob("modules/**/module.yaml").find do |path|
+        data = YAML.load_file(path)
+        data.dig("metadata", "id") == module_id
+      end
+      return { "repository" => repository, "chart" => module_id, "version" => fallback_chart_version(module_id) } unless metadata_path
+
+      metadata = KubernetesModule.load(metadata_path)
+      metadata.validate!
+      source = metadata.data.dig("spec", "source")
+      raise "Kubernetes module #{module_id} must declare a Helm source" unless source.fetch("type") == "helm"
+
+      source
+    end
+
+    def fallback_chart_version(module_id)
+      {
+        "cert-manager" => "v1.21.2",
+        "external-dns" => "1.23.0",
+        "external-secrets" => "2.12.0"
+      }.fetch(module_id)
     end
 
     def gateway_certificate(profile, profile_values)
@@ -774,7 +799,7 @@ module OPSd
       "git::#{repo}//#{module_path}?ref=#{version}"
     end
 
-    def externalize_module_sources(main_tf, module_source, module_package_root)
+    def externalize_module_sources(main_tf, module_source, module_package_root, output_path:)
       return main_tf if module_source.nil?
 
       repo = normalize_repo_url(module_source[:repo] || module_source["repo"])
@@ -782,6 +807,11 @@ module OPSd
       return main_tf if repo.nil? || repo.to_s.empty? || version.nil? || version.to_s.empty?
 
       local_root = Regexp.escape(module_package_root.to_s)
+      if module_source[:synced] || module_source["synced"]
+        relative_root = Pathname(module_package_root).relative_path_from(Pathname(output_path).expand_path).to_s
+        return main_tf.gsub(/#{local_root}\/\/(modules\/[^"\s]+)/) { "#{relative_root}/#{$1}" }
+      end
+
       main_tf.gsub(/#{local_root}\/\/(modules\/[^\"\s]+)/) do
         "git::#{repo}//#{$1}?ref=#{version}"
       end

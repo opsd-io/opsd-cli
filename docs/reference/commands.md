@@ -22,7 +22,7 @@ Completion already covers the discoverable command and flag names, so this page 
 - `init` creates a starter manifest from a blueprint.
 - `validate` checks a manifest without rendering infrastructure.
 - `verify` checks a manifest, plan, or lifecycle snapshot against OPSd rules.
-- `render` generates the final OpenTofu handoff from a valid manifest.
+- `render` generates the final OpenTofu handoff from a valid manifest. For Kubernetes manifests, `--include-platform` also renders enabled Helm charts using the locked local artifacts. Run `modules sync` first.
 - `modules sync <manifest>` materializes the pinned DigitalOcean and Kubernetes module repositories under `modules/`, records their immutable commits and chart digests in `opsd.lock.yaml`, and caches the pinned Helm archives. Use `--update` to intentionally resolve and replace pins; local edits to managed module trees must be resolved first.
 - `bootstrap` waits for the active Kubernetes context to be ready, then installs the pinned Argo CD chart described by the `modules-kubernetes` module. Pass `--manifest <path>` to configure the GitOps repository from the manifest. For private HTTPS repositories, supply `OPSD_ARGOCD_REPO_USERNAME` and `OPSD_ARGOCD_REPO_PASSWORD`; for SSH repositories, supply `OPSD_ARGOCD_REPO_SSH_PRIVATE_KEY`. Credentials are applied directly to the cluster as an Argo CD repository Secret and are not written to generated files. It requires `kubectl`, Helm and Git in `PATH`, and can be rerun. The module source defaults to `main`; set `OPSD_MODULES_KUBERNETES_REF` to use another branch, tag or commit.
 - `export` packages a rendered handoff into a portable exit pack.
