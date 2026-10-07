@@ -26,6 +26,7 @@ require_relative "version"
 require_relative "kubernetes_bootstrap"
 require_relative "modules_synchronizer"
 require_relative "platform_renderer"
+require_relative "platform_validator"
 
 module OPSd
   class CLI
@@ -39,7 +40,7 @@ module OPSd
       list: %w[blueprints],
       describe: %w[blueprint],
       init: %w[blueprint],
-      validate_render: %w[manifest module],
+      validate_render: %w[manifest module --platform],
       modules: %w[sync],
       verify: %w[config plan lifecycle],
       export: %w[exit-pack],
@@ -54,6 +55,7 @@ module OPSd
     }.freeze
     COMPLETION_OPTIONS = {
       render: %w[--output --include-platform],
+      validate_render: %w[--platform --offline],
       resize: %w[--profile],
       scale: %w[--replicas],
       bootstrap: %w[--manifest],
@@ -566,11 +568,35 @@ module OPSd
 
       return puts(validate_usage) if manifest_path.nil? || help_flag?(manifest_path) || help_requested?
       raise "Usage: opsd validate manifest <manifest.yaml>" if manifest_path.nil?
-      raise "Usage: opsd validate manifest <manifest.yaml>" unless @argv.empty?
 
       manifest = load_manifest(manifest_path)
       manifest.validate!
       capability_validator.validate!(manifest)
+
+      platform = @argv.delete("--platform")
+      offline = @argv.delete("--offline")
+      raise "Usage: opsd validate manifest <manifest.yaml> [--platform [--offline]]" unless @argv.empty?
+      raise "The --offline option requires --platform." if offline && !platform
+      if platform
+        raise "Platform validation is supported for Kubernetes manifests only." unless manifest.family == "kubernetes"
+
+        lock_path = Pathname(lock_path_for_manifest(manifest_path))
+        ModulesSynchronizer.new(workspace_root: @workspace, env: ENV, module_catalog: module_catalog).verify(manifest_path:)
+        existing_lock = YAML.load_file(lock_path)
+        resolution = module_catalog.resolve(manifest.provider, lockfile_path: lock_path)
+        module_lock = existing_lock.merge(module_catalog.lock_data_for(resolution)) do |key, existing, generated|
+          key == "provider_modules" ? existing : generated
+        end
+        PlatformValidator.new(workspace_root: @workspace, app_root: @app_root).validate(
+          manifest:,
+          manifest_path:,
+          module_resolution: resolution,
+          module_lock:,
+          offline: !offline.nil?
+        )
+        puts "Terraform/OpenTofu and Helm/Kubernetes validation passed: #{manifest_path}"
+        return
+      end
 
       puts "Manifest is valid: #{manifest_path}"
       puts "Provider: #{manifest.provider}"
@@ -2843,12 +2869,14 @@ module OPSd
 
     def validate_usage
       help_block(
-        "Usage: opsd validate <manifest <manifest.yaml>|module <module.yaml>>",
+        "Usage: opsd validate manifest <manifest.yaml> [--platform [--offline]] | module <module.yaml>",
         [
           [
             "Before render",
             [
-              ["check", "Check a manifest or Kubernetes module metadata before use"]
+              ["check", "Check a manifest or Kubernetes module metadata before use"],
+              ["--platform", "Validate generated Terraform/OpenTofu and pinned Helm/Kubernetes artifacts"],
+              ["--offline", "Use only cached provider plugins and Kubernetes schemas; fail if a cache entry is missing"]
             ]
           ]
         ]
@@ -2871,26 +2899,6 @@ module OPSd
       )
     end
 
-    def modules_usage
-      help_block(
-        "Usage: opsd modules sync <manifest.yaml> [--update]",
-        [
-          [
-            "Commands",
-            [
-              ["sync", "Materialize pinned modules and cache their Helm charts"]
-            ]
-          ],
-          [
-            "Options",
-            [
-              ["--update", "Resolve current refs and explicitly update module and chart pins"]
-            ]
-          ]
-        ]
-      )
-    end
-
     def render_usage
       help_block(
         "Usage: opsd render manifest <manifest.yaml> --output <directory> [--include-platform]",
@@ -2900,6 +2908,26 @@ module OPSd
             [
               ["--output <directory>", "Write the runnable OpenTofu stack to this directory"],
               ["--include-platform", "Render enabled Helm charts from the locked local artifacts"]
+            ]
+          ]
+        ]
+      )
+    end
+
+    def modules_usage
+      help_block(
+        "Usage: opsd modules sync <manifest.yaml> [--update]",
+        [
+          [
+            "Commands",
+            [
+              ["sync", "Materialize the pinned DigitalOcean and Kubernetes modules and cache their Helm charts"]
+            ]
+          ],
+          [
+            "Options",
+            [
+              ["--update", "Resolve current refs and explicitly update the module and chart pins"]
             ]
           ]
         ]
