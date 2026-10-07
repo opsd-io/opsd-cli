@@ -64,12 +64,12 @@ manifest:
           blueprint: droplet-single
           variant: vm
           description: Reference single-droplet path with DNS handoff.
-        - id: digitalocean-reference-kubernetes-basic
+        - id: digitalocean-reference-kubernetes-foundation
           status: reference
           family: kubernetes
-          stack: kubernetes-basic
-          blueprint: kubernetes-basic
-          variant: default
+          stack: kubernetes-foundation
+          blueprint: kubernetes-foundation
+          variant: kubernetes
           description: Reference Kubernetes baseline path.
         - id: digitalocean-reference-spaces-only
           status: reference

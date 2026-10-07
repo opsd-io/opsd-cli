@@ -63,12 +63,20 @@ OPSD_PROFILE=work bin/opsd render manifest demo.yaml --output live/
 ```
 
 To render and qualify the Kubernetes platform path, synchronize the pinned
-module sources first. Helm must be available in `PATH`:
+module sources first. Helm, Terraform and OpenTofu must be available in `PATH`:
 
 ```bash
 OPSD_PROFILE=work bin/opsd modules sync demo.yaml
 OPSD_PROFILE=work bin/opsd render manifest demo.yaml --output live/ --include-platform
 OPSD_PROFILE=work bin/opsd validate manifest demo.yaml --platform
+```
+
+The first platform validation needs network access to populate provider and
+Kubernetes schema caches. After a successful online validation, repeat it with
+`--offline` to use only the warmed caches:
+
+```bash
+OPSD_PROFILE=work bin/opsd validate manifest demo.yaml --platform --offline
 ```
 
 ## CI Coverage

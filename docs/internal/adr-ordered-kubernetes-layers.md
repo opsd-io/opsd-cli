@@ -1,6 +1,6 @@
 # ADR: Ordered Kubernetes Platform Layers
 
-- Status: Accepted
+- Status: Accepted (implementation notes updated)
 - Scope: `opsd-cli` Kubernetes manifests and rendered layer plans
 - Related: #51, #61
 
@@ -19,7 +19,7 @@ render order, names, descriptions, and output directories:
 
 | Order | ID | Directory | Responsibility |
 | ---: | --- | --- | --- |
-| 0 | `bootstrap` | `00-bootstrap` | Apply the root app-of-apps and install ArgoCD. |
+| 0 | `bootstrap` | `00-bootstrap` | Initial Argo CD and GitOps hand-off. |
 | 10 | `infrastructure` | `10-infrastructure` | Provider and cluster infrastructure integrations. |
 | 20 | `monitoring` | `20-monitoring` | Metrics, logs, alerts and dashboards. |
 | 30 | `tools` | `30-tools` | Ingress, certificates, DNS and registries. |
@@ -51,20 +51,25 @@ while `monitoring`, `tools`, and `applications` are disabled. The renderer
 always emits the complete five-layer plan and directory structure, including
 disabled layers.
 
-The bootstrap layer is intentionally small. It renders the root `app-of-apps`
-entrypoint, whose purpose is to install ArgoCD. Once ArgoCD is available, it
-can reconcile the remaining layer applications. Bootstrap is therefore the
-initial GitOps hand-off, not a general-purpose container for all pre-platform
-resources.
+The bootstrap layer is intentionally small. `opsd bootstrap` installs the
+pinned Argo CD chart directly. When GitOps repository settings are present,
+rendering also emits the root Application, AppProjects, and layer Applications
+for the client repository. The operator applies the bootstrap Project and root
+Application once; Argo CD then reconciles the remaining configuration. Helm
+charts and Kubernetes resources supported by the platform renderer are emitted
+under their respective generated platform and layer paths. The layer plan
+remains broader than the currently implemented component set.
 
 ## Ownership boundaries
 
 - This contract owns layer identity, order, descriptions, defaults, and
   manifest-level enablement.
-- `modules-kubernetes` owns module metadata and module schemas (#62).
-- Source types, version/ref pinning, and lock metadata belong to #63.
-- Component selection, values precedence, provider overrides, and detailed
-  validation belong to #64.
+- `modules-kubernetes` owns module metadata, defaults, schemas, and chart
+  sources.
+- `opsd-cli` synchronizes and locks module repositories and chart artifacts.
+- `opsd-cli` currently recognizes selected components and applies module
+  defaults, manifest values, and provider overrides. Module JSON Schema value
+  validation and provider-default loading remain implementation gaps.
 - Provider repositories implement the provider-specific infrastructure behind
   the provider-neutral layer contract.
 
@@ -76,5 +81,6 @@ resources.
 - There is no migration alias for the previous placeholder names (`core`,
   `observability`, and `apps`); the new contract is introduced before public
   consumers depend on the placeholder model.
-- Later module and GitOps work can add content to stable directories without
-  changing the layer selection contract.
+- Additional modules and GitOps resources can populate stable directories
+  without changing the layer selection contract; the CLI must explicitly
+  support newly added module IDs before it renders them.

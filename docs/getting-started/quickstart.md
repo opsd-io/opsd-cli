@@ -33,6 +33,21 @@ OPSD_PROFILE=work bin/opsd validate manifest demo.yaml
 OPSD_PROFILE=work bin/opsd render manifest demo.yaml --output live/
 ```
 
+## Optional: Render The Kubernetes Platform
+
+For a Kubernetes manifest, synchronize its pinned module and chart sources,
+then render enabled platform components. Helm must be available in `PATH`.
+
+```bash
+OPSD_PROFILE=work bin/opsd modules sync demo.yaml
+OPSD_PROFILE=work bin/opsd render manifest demo.yaml --output live/ --include-platform
+OPSD_PROFILE=work bin/opsd validate manifest demo.yaml --platform
+```
+
+Platform validation needs network access the first time so it can cache
+Terraform/OpenTofu providers and Kubernetes schemas. Once those caches are
+warmed, add `--offline` to validate without network access.
+
 ## 5. Hand Off To OpenTofu
 
 ```bash

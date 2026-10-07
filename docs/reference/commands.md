@@ -20,7 +20,7 @@ Completion already covers the discoverable command and flag names, so this page 
 ## Workflow
 
 - `init` creates a starter manifest from a blueprint.
-- `validate` checks a manifest without rendering infrastructure. Use `validate manifest <file> --platform` to validate the generated Terraform/OpenTofu, Helm charts, and Kubernetes resources against the pinned modules.
+- `validate` checks a manifest without rendering infrastructure. Use `validate manifest <file> --platform` to validate generated Terraform/OpenTofu, enabled pinned Helm charts, and Kubernetes resources. The first run needs network access to download provider plugins and built-in Kubernetes schemas into the workspace cache. Use `--offline` after a successful online run to require and use those caches without network access.
 - `verify` checks a manifest, plan, or lifecycle snapshot against OPSd rules.
 - `render` generates the final OpenTofu handoff from a valid manifest. For a Kubernetes manifest, `--include-platform` also renders enabled Helm charts from the local, pinned chart cache.
 - `modules sync <manifest>` explicitly materializes the pinned DigitalOcean and Kubernetes module repositories under `modules/`, records their immutable commits and chart digests in `opsd.lock.yaml`, and caches the pinned Helm archives. Use `--update` to intentionally resolve and replace pins; local edits to managed module trees must be resolved first.
