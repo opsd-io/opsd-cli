@@ -9,9 +9,12 @@ resolved from versioned releases and recorded in `opsd.lock.yaml`, so a
 generated environment can be reproduced with the same module commit.
 
 The initial supported provider is DigitalOcean. The primary path is a
-Kubernetes foundation with optional platform layers planned for ArgoCD,
-observability, tools, and applications. Droplet and Spaces paths are also
-available where they are currently implemented.
+Kubernetes foundation with an ordered layer plan and selected platform
+components. The CLI can render pinned Argo CD, ExternalDNS, External Secrets,
+and cert-manager Helm charts when their manifest conditions are met; it also
+renders DOKS Gateway API resources. The monitoring and application layers do
+not yet provide a complete component catalog. Droplet and Spaces paths are
+available where implemented.
 
 ## Quick start
 

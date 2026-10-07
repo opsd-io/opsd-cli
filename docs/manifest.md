@@ -205,7 +205,7 @@ The canonical layers and their fixed render order are:
 
 | Order | Layer | Directory | Purpose |
 | ---: | --- | --- | --- |
-| 0 | `bootstrap` | `00-bootstrap` | Apply the root app-of-apps and install ArgoCD. |
+| 0 | `bootstrap` | `00-bootstrap` | Initial Argo CD installation and GitOps hand-off. |
 | 10 | `infrastructure` | `10-infrastructure` | Provider and cluster infrastructure integrations. |
 | 20 | `monitoring` | `20-monitoring` | Metrics, logs, alerts and dashboards. |
 | 30 | `tools` | `30-tools` | Ingress, certificates, DNS and registries. |
@@ -337,31 +337,39 @@ operator examples for direct SSH access, Kubernetes API tunnels, private
 database tunnels, and a reusable `~/.ssh/config` alias. The generated guide
 keeps kubeconfig and database credentials on the operator workstation.
 
-The renderer materializes the ordered layer plan, selected GitOps repository,
-Argo CD resources and layer placeholders. Later implementation stages add
-provider and module resources to their corresponding layer directories.
+The renderer materializes the ordered layer plan and, when configured, the
+GitOps resources. `opsd render --include-platform` also renders the Helm charts
+currently supported by the CLI and enabled by the manifest. The layer plan is
+broader than the current component implementation: the `monitoring` and
+`applications` layers do not yet have a complete component catalog.
 
 #### Layer components
 
-Each layer may select components from the catalog exposed by the pinned
-Kubernetes module release. Component identifiers are stable module IDs; the
-CLI does not hardcode the catalog so new module releases can add components
-without requiring a CLI release.
+Component identifiers are module IDs, but the CLI currently recognizes a
+defined set of platform components; adding a module to the catalog alone does
+not make the CLI render it. Current Helm chart rendering covers `argocd`,
+`external-dns`, `external-secrets`, and `cert-manager`, each under the
+conditions described in its relevant section below. Other recognized
+components, such as `bastion` and `gateway-api`, are rendered through their
+DigitalOcean or DOKS-specific paths and are not Helm charts. Check the module
+documentation and examples before selecting a component.
 
 ```yaml
 spec:
   layers:
-    tools:
+    infrastructure:
       enabled: true
       components:
-        ingress:
+        external-dns:
           enabled: true
           values:
-            replicas: 2
+            domain_filters:
+              - example.com
+            txt_owner_id: production
           provider_overrides:
             digitalocean:
               values:
-                service_type: LoadBalancer
+                policy: upsert-only
 ```
 
 Every selected component requires an explicit boolean `enabled` value. A
@@ -369,15 +377,16 @@ component cannot be enabled while its parent layer is disabled. Component
 values are merged in this order, from lowest to highest precedence:
 
 1. module defaults;
-2. provider defaults;
-3. manifest component `values`;
-4. manifest `provider_overrides.<provider>.values`.
+2. manifest component `values`;
+3. manifest `provider_overrides.<provider>.values`.
 
-The module release is pinned once as a whole in `spec.origin.modules`; a
-component does not carry a separate source pin. Official module schemas use
-JSON Schema and are strict. Custom modules must be explicitly marked
-permissive by their module metadata before they can accept provider-specific
-extensions.
+The provider module release is recorded in `spec.origin.modules`. The
+Kubernetes module repository commit and individual Helm chart versions and
+digests are recorded separately in `opsd.lock.yaml` under
+`kubernetes_modules` and `helm_charts`. The current CLI validates Kubernetes
+module metadata, but does not yet apply a module's `schema.yaml` to manifest
+component values or load provider-specific defaults. `provider_overrides` are
+merged for the selected provider.
 
 Example:
 
