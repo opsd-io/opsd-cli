@@ -1,0 +1,39 @@
+name: Publish website documentation
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-website:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release event
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Expected a stable vX.Y.Z release tag, received: $RELEASE_TAG" >&2
+            exit 1
+          }
+      - name: Trigger website documentation build
+        env:
+          GITLAB_PROJECT_ID: ${{ vars.OPSD_WEBSITE_GITLAB_PROJECT_ID }}
+          GITLAB_TRIGGER_TOKEN: ${{ secrets.OPSD_WEBSITE_GITLAB_TRIGGER_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          test -n "$GITLAB_PROJECT_ID" || { echo "Set repository variable OPSD_WEBSITE_GITLAB_PROJECT_ID" >&2; exit 1; }
+          [[ "$GITLAB_PROJECT_ID" =~ ^[0-9]+$ ]] || { echo "GitLab project ID must be numeric" >&2; exit 1; }
+          test -n "$GITLAB_TRIGGER_TOKEN" || { echo "Set repository secret OPSD_WEBSITE_GITLAB_TRIGGER_TOKEN" >&2; exit 1; }
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --form "token=$GITLAB_TRIGGER_TOKEN" \
+            --form "ref=main" \
+            --form "variables[OPSD_RELEASE_VENDOR]=github" \
+            --form "variables[OPSD_RELEASE_REPOSITORY]=opsd-io/opsd-cli" \
+            --form "variables[OPSD_RELEASE_GIT_URL]=https://github.com/opsd-io/opsd-cli.git" \
+            --form "variables[OPSD_RELEASE_TAG]=$RELEASE_TAG" \
+            "https://gitlab.com/api/v4/projects/$GITLAB_PROJECT_ID/trigger/pipeline"
