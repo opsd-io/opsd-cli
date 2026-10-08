@@ -14,6 +14,33 @@
 
 - None yet.
 
+## [0.2.0](https://github.com/opsd-io/opsd-cli/compare/v0.1.0...v0.2.0) (2026-10-08)
+
+
+### Features
+
+* **cli:** add Argo CD bootstrap command ([#147](https://github.com/opsd-io/opsd-cli/issues/147)) ([d10dda3](https://github.com/opsd-io/opsd-cli/commit/d10dda36605d27ff55b4e7481a753d7452b7807b))
+* **cli:** add client GitOps repository configuration ([#148](https://github.com/opsd-io/opsd-cli/issues/148)) ([fdd5dc1](https://github.com/opsd-io/opsd-cli/commit/fdd5dc1e0841c91dcd0f9b3fd7bb9aa166fb5008))
+* **cli:** add DigitalOcean ExternalDNS integration ([#155](https://github.com/opsd-io/opsd-cli/issues/155)) ([918fd8e](https://github.com/opsd-io/opsd-cli/commit/918fd8ecee706bfca56aee76f57fd916bd4bd78a))
+* **cli:** add DNS-01 certificates to DOKS gateways ([#154](https://github.com/opsd-io/opsd-cli/issues/154)) ([62b60e4](https://github.com/opsd-io/opsd-cli/commit/62b60e4eb380a42c21c768194fdb29611968558f))
+* **cli:** add locked Kubernetes module sources ([#139](https://github.com/opsd-io/opsd-cli/issues/139)) ([8c35661](https://github.com/opsd-io/opsd-cli/commit/8c3566197ec94407c65fb1d129a82f9b2d9c2632))
+* **cli:** configure private Argo CD repository access ([#151](https://github.com/opsd-io/opsd-cli/issues/151)) ([1281247](https://github.com/opsd-io/opsd-cli/commit/128124746c7723fee1b614f88caa6469953230bc))
+* **cli:** define bastion access contract ([#141](https://github.com/opsd-io/opsd-cli/issues/141)) ([a322558](https://github.com/opsd-io/opsd-cli/commit/a322558f62330050b2776d2d7873c82b42d812c0))
+* **cli:** define Kubernetes module metadata format ([#138](https://github.com/opsd-io/opsd-cli/issues/138)) ([07bdbd0](https://github.com/opsd-io/opsd-cli/commit/07bdbd0935b682c8dd7d9dfd92fada7700302365))
+* **cli:** define ordered Kubernetes layer contract ([#136](https://github.com/opsd-io/opsd-cli/issues/136)) ([471c437](https://github.com/opsd-io/opsd-cli/commit/471c43748ebf95f2e9deac18c65afd6c2c045ce6))
+* **cli:** extend Kubernetes platform manifest contract ([#140](https://github.com/opsd-io/opsd-cli/issues/140)) ([2a7c97e](https://github.com/opsd-io/opsd-cli/commit/2a7c97ec4e882c49f74309c755adf40f71b0e3b1))
+* **cli:** lock Kubernetes Helm artifacts ([0fee2a7](https://github.com/opsd-io/opsd-cli/commit/0fee2a72f972461d3c61d84e94c91230761e1f98))
+* **cli:** lock Kubernetes modules and charts ([#158](https://github.com/opsd-io/opsd-cli/issues/158)) ([0fee2a7](https://github.com/opsd-io/opsd-cli/commit/0fee2a72f972461d3c61d84e94c91230761e1f98))
+* **cli:** materialize pinned OPSd modules ([#157](https://github.com/opsd-io/opsd-cli/issues/157)) ([b6bb590](https://github.com/opsd-io/opsd-cli/commit/b6bb590e38d79d0efded784f6ade0520f8b5add4))
+* **cli:** order Argo CD layer sync ([#150](https://github.com/opsd-io/opsd-cli/issues/150)) ([9241561](https://github.com/opsd-io/opsd-cli/commit/92415614f876e689d18f454e71ae1913f0771aea))
+* **cli:** render Argo CD root application and projects ([#149](https://github.com/opsd-io/opsd-cli/issues/149)) ([5f82403](https://github.com/opsd-io/opsd-cli/commit/5f824037e89c9d685f69abdd626fbce85af105fa))
+* **cli:** render External Secrets Operator ([#156](https://github.com/opsd-io/opsd-cli/issues/156)) ([3b421c3](https://github.com/opsd-io/opsd-cli/commit/3b421c3381bd47a471b5a8bf8d88f19aad1a5e49))
+* **cli:** render optional DOKS Gateway profiles ([#153](https://github.com/opsd-io/opsd-cli/issues/153)) ([2f7e704](https://github.com/opsd-io/opsd-cli/commit/2f7e70419e7bd1966ae0c120202b9b9cd44959ba))
+* **cli:** render pinned Kubernetes platform charts ([#159](https://github.com/opsd-io/opsd-cli/issues/159)) ([da6ac76](https://github.com/opsd-io/opsd-cli/commit/da6ac76b255fbdbca1ecf7c7379448da0f6fd09f))
+* **cli:** validate DOKS Gateway API prerequisites ([#152](https://github.com/opsd-io/opsd-cli/issues/152)) ([e02e713](https://github.com/opsd-io/opsd-cli/commit/e02e71320a15912ae4ef7f83164844487c52a1ae))
+* **cli:** validate rendered Kubernetes platform ([#160](https://github.com/opsd-io/opsd-cli/issues/160)) ([7620c4b](https://github.com/opsd-io/opsd-cli/commit/7620c4bc7d0c3cbb23483d6bd9498d25861f52c9))
+* **cli:** warn on unsafe DOKS control plane access ([#142](https://github.com/opsd-io/opsd-cli/issues/142)) ([a3d2745](https://github.com/opsd-io/opsd-cli/commit/a3d2745648fe13f2dba43f0f890bde0dcd99def0))
+
 ## [0.1.0](https://github.com/opsd-io/opsd-cli/compare/v2.1.0...v0.1.0) (2026-09-21)
 
 
