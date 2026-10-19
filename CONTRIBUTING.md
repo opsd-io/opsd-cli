@@ -26,6 +26,10 @@ sh scripts/ci/run_unit_cli_tests.sh
 If you are touching render or smoke behavior, also run the relevant smoke
 script for the path you changed.
 
+For MCP changes, also run `sh scripts/ci/run_mcp_protocol_tests.sh` with `uv`
+and Python 3.11 available. See [MCP protocol qualification](./docs/reference/mcp-server.md#protocol-qualification)
+for the pinned official SDK/schema, local commands, and CI coverage.
+
 ## Pull Requests And Commits
 
 Every pull request title and every commit included in it must use:

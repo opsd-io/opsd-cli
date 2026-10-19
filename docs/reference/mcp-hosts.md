@@ -1,6 +1,11 @@
 # MCP Host Configuration
 
-OPSd can be connected to any MCP host that supports the MCP `stdio` transport.
+OPSd requires an MCP host that supports the `2026-07-28` protocol revision and
+its per-request metadata over `stdio`. Stdio transport support alone is not
+sufficient; hosts that only support the earlier initialization handshake cannot
+connect. The configuration examples below describe launcher registration, not
+verified host-version compatibility. See [MCP Server](./mcp-server.md) for the
+protocol contract.
 The command below prints a ready-to-paste host snippet for the current checkout
 or a separate workspace:
 

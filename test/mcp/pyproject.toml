@@ -1,0 +1,11 @@
+[project]
+name = "opsd-mcp-protocol-tests"
+version = "0.0.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "mcp==2.3.0",
+  "jsonschema>=4.20.0",
+]
+
+[tool.uv]
+package = false
