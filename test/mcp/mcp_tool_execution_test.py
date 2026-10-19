@@ -1,0 +1,165 @@
+"""SDK-driven tests of real OPSd CLI execution and filesystem effects."""
+
+import asyncio
+from contextlib import asynccontextmanager
+import json
+from pathlib import Path
+import tarfile
+import tempfile
+import unittest
+
+from mcp import Client, StdioServerParameters
+
+from mcp_protocol_test import APP_ROOT, TIMEOUT, server_environment
+
+
+def write_workspace(workspace):
+    """Use local provider fixtures only: no cloud credentials, remote modules, or personal cache."""
+    provider = workspace / "modules/digitalocean"
+    (provider / "blueprints").mkdir(parents=True)
+    (provider / "opsd.yaml").write_text(json.dumps({
+        "profiles": {"compute": {"kubernetes": ["s-2vcpu-4gb"]}}, "addons": {},
+    }))
+    (provider / "blueprints/kubernetes-foundation.yaml").write_text(json.dumps({
+        "id": "kubernetes-foundation", "title": "MCP Kubernetes Foundation", "provider": "digitalocean",
+        "variants": [{"id": "kubernetes", "title": "Kubernetes", "family": "kubernetes",
+                      "stack": "kubernetes-foundation"}],
+    }))
+    (workspace / ".opsd").mkdir()
+    (workspace / ".opsd/config").write_text(json.dumps({
+        "current_profile": "mcp-test", "profiles": {"mcp-test": {"provider": "digitalocean"}},
+    }))
+    source = (APP_ROOT / "examples/kubernetes-environment.yaml").read_text()
+    (workspace / "valid.yaml").write_text(source)
+    invalid = source.replace("apiVersion: opsd.io/v2alpha1", "apiVersion: opsd.io/unsupported")
+    assert invalid != source
+    (workspace / "invalid.yaml").write_text(invalid)
+    return source
+
+
+@asynccontextmanager
+async def client_workspace():
+    with tempfile.TemporaryDirectory(prefix="opsd MCP execution ") as directory:
+        workspace = Path(directory)
+        write_workspace(workspace)
+        params = StdioServerParameters(
+            command=str(APP_ROOT / "bin/opsd-mcp"), env=server_environment(workspace), cwd=directory,
+        )
+        async with asyncio.timeout(30):
+            async with Client(params, mode="2026-07-28", read_timeout_seconds=TIMEOUT) as client:
+                yield client, workspace
+
+
+class McpToolExecutionTest(unittest.IsolatedAsyncioTestCase):
+    def assert_success(self, response):
+        self.assertFalse(response.is_error, response.content)
+        output = response.structured_content
+        self.assertEqual(0, output["exitCode"])
+        self.assertFalse(output["timedOut"])
+        return output
+
+    def assert_failure(self, response):
+        self.assertTrue(response.is_error, response.content)
+        output = response.structured_content
+        self.assertNotEqual(0, output["exitCode"])
+        self.assertFalse(output["timedOut"])
+        return output
+
+    async def test_blueprint_tools_return_actual_catalog_and_description(self):
+        async with client_workspace() as (client, _):
+            output = self.assert_success(await client.call_tool("list-blueprints", {}))
+            self.assertIn("Blueprint Catalog", output["stdout"])
+            self.assertIn("MCP Kubernetes Foundation", output["stdout"])
+            self.assertIn("kubernetes-foundation", output["stdout"])
+            output = self.assert_success(await client.call_tool("describe-blueprint", {
+                "blueprint": "kubernetes-foundation", "variant": "kubernetes",
+            }))
+            self.assertIn("ID: kubernetes-foundation", output["stdout"])
+            self.assertIn("kubernetes", output["stdout"])
+
+    async def test_validation_reports_missing_and_invalid_manifests_and_recovers(self):
+        async with client_workspace() as (client, workspace):
+            original = (workspace / "valid.yaml").read_bytes()
+            output = self.assert_failure(await client.call_tool("validate-manifest", {"manifest_path": "missing.yaml"}))
+            self.assertIn("Manifest file not found", output["stderr"])
+            output = self.assert_failure(await client.call_tool("validate-manifest", {"manifest_path": "invalid.yaml"}))
+            self.assertIn("Validation failed", output["stderr"])
+            output = self.assert_success(await client.call_tool("validate-manifest", {"manifest_path": "valid.yaml"}))
+            self.assertIn("Manifest is valid", output["stdout"])
+            self.assertEqual(original, (workspace / "valid.yaml").read_bytes())
+
+    async def test_render_creates_real_artifacts_and_export_archives_them(self):
+        async with client_workspace() as (client, workspace):
+            rendered = "generated $(touch render-injected); stack"
+            output = self.assert_success(await client.call_tool("render-manifest", {
+                "manifest_path": "valid.yaml", "output_dir": rendered,
+            }))
+            self.assertIn("Rendered stack:", output["stdout"])
+            target = workspace / rendered
+            for name in ("main.tf", "variables.tf", "outputs.tf", "opsd.auto.tfvars", "opsd.manifest.yaml",
+                         "opsd.lock.yaml", "README.md", "scenario.json", "opsd.layers.yaml"):
+                self.assertTrue((target / name).is_file(), name)
+                self.assertGreater((target / name).stat().st_size, 0, name)
+            self.assertEqual("kubernetes-foundation", json.loads((target / "scenario.json").read_text())["id"])
+            original_main = (target / "main.tf").read_bytes()
+            self.assertIn(b"acme-cluster-prod", (target / "opsd.auto.tfvars").read_bytes())
+            # The CLI's refusal to overwrite must be visible to MCP too.
+            self.assert_failure(await client.call_tool("render-manifest", {
+                "manifest_path": "valid.yaml", "output_dir": rendered,
+            }))
+            self.assertEqual(original_main, (target / "main.tf").read_bytes())
+            archive = "handoff $(touch archive-injected).tar.gz"
+            self.assert_success(await client.call_tool("export-exit-pack", {"rendered_dir": rendered, "output_path": archive}))
+            with tarfile.open(workspace / archive) as bundle:
+                self.assertEqual(original_main, bundle.extractfile("exit-pack/main.tf").read())
+                self.assertIn("exit-pack/HANDOFF.md", bundle.getnames())
+            self.assertFalse((workspace / "render-injected").exists())
+            self.assertFalse((workspace / "archive-injected").exists())
+
+    async def test_paths_with_shell_syntax_and_option_like_names_are_literal(self):
+        async with client_workspace() as (client, workspace):
+            source = (workspace / "valid.yaml").read_text()
+            for name in ("env $(touch injected); demo.yaml", "--help"):
+                with self.subTest(name=name):
+                    (workspace / name).write_text(source)
+                    output = self.assert_success(await client.call_tool("validate-manifest", {"manifest_path": name}))
+                    self.assertIn("Manifest is valid:", output["stdout"])
+                    self.assertIn(name, output["stdout"])
+            self.assertFalse((workspace / "injected").exists())
+
+    async def test_verification_tools_execute_and_report_rejected_inputs(self):
+        async with client_workspace() as (client, workspace):
+            self.assert_success(await client.call_tool("verify-config", {"manifest_path": "valid.yaml"}))
+            plan = {"format_version": "1.0", "resource_changes": []}
+            (workspace / "plan.json").write_text(json.dumps(plan))
+            output = self.assert_success(await client.call_tool("verify-plan", {"plan_path": "plan.json"}))
+            self.assertIn("Plan is supported", output["stdout"])
+            (workspace / "plan.json").write_text("{broken")
+            self.assert_failure(await client.call_tool("verify-plan", {"plan_path": "plan.json"}))
+            snapshot = {"provider": "digitalocean", "provider_version": "v1.0.0", "tofu_version": "1.10.0", "policy_version": "2"}
+            (workspace / "lifecycle.json").write_text(json.dumps(snapshot))
+            output = self.assert_success(await client.call_tool("verify-lifecycle", {"snapshot_path": "lifecycle.json"}))
+            self.assertIn("Lifecycle is compatible", output["stdout"])
+            snapshot["provider_version"] = "v9.9.9"
+            (workspace / "lifecycle.json").write_text(json.dumps(snapshot))
+            self.assert_failure(await client.call_tool("verify-lifecycle", {"snapshot_path": "lifecycle.json"}))
+
+    async def test_mutations_remain_blocked_even_with_confirmed_true(self):
+        async with client_workspace() as (client, workspace):
+            manifest = workspace / "valid.yaml"
+            original = manifest.read_bytes()
+            tools = {
+                "add-compute-group": {"id": "new", "role": "cluster", "type": "cluster", "profile": "s-2vcpu-4gb"},
+                "resize-compute-group": {"resource_id": "primary", "profile": "s-2vcpu-4gb"},
+                "scale-compute-group": {"resource_id": "primary", "replicas": 2},
+                "attach-compute-group": {"resource_id": "primary", "load_balancer_id": "lb"},
+                "detach-compute-group": {"resource_id": "primary", "load_balancer_id": "lb"},
+                "remove-resource": {"resource": "compute-group", "resource_id": "primary"},
+            }
+            for name, arguments in tools.items():
+                for confirmed in (False, True):
+                    with self.subTest(tool=name, confirmed=confirmed):
+                        result = await client.call_tool(name, dict(arguments, manifest_path="valid.yaml", confirmed=confirmed))
+                        self.assertTrue(result.is_error)
+                        self.assertIn("W9.3", result.content[0].text)
+                        self.assertEqual(original, manifest.read_bytes())
