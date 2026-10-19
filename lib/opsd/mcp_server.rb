@@ -6,11 +6,13 @@ require "pathname"
 require_relative "mcp_prompt_catalog"
 require_relative "mcp_resource_catalog"
 require_relative "mcp_tool_catalog"
+require_relative "mcp_tool_executor"
 require_relative "version"
 
 module OPSd
   class McpServer
     PROTOCOL_VERSION = "2026-07-28"
+    PATH_ARGUMENTS = %w[manifest_path plan_path snapshot_path rendered_dir output_dir output_path].freeze
     CACHEABLE_METHODS = %w[
       server/discover resources/list resources/templates/list resources/read prompts/list tools/list
     ].freeze
@@ -24,6 +26,7 @@ module OPSd
       @resources = McpResourceCatalog.new(app_root: @app_root, workspace_root: @workspace_root)
       @prompts = McpPromptCatalog.new(app_root: @app_root, workspace_root: @workspace_root)
       @tools = McpToolCatalog.new(app_root: @app_root, workspace_root: @workspace_root)
+      @executor = McpToolExecutor.new(app_root: @app_root, workspace_root: @workspace_root)
     end
 
     def run
@@ -201,30 +204,25 @@ module OPSd
       validate_arguments(tool.arguments, arguments)
       confirmed = truthy?(arguments["confirmed"] || arguments[:confirmed] || params["confirmed"] || params[:confirmed])
 
-      argv = @tools.dispatch(name, stringify_keys(arguments), confirmed: confirmed)
-      {
-        "content" => [
-          {
-            "type" => "text",
-            "text" => argv.join(" ")
-          }
-        ],
-        "isError" => false
-      }
-    rescue RuntimeError => e
-      if e.message.include?("requires explicit confirmation")
-        {
-          "content" => [
-            {
-              "type" => "text",
-              "text" => e.message
-            }
-          ],
-          "isError" => true
-        }
-      else
-        raise
+      if tool.requires_confirmation
+        message = if confirmed
+                    "Tool #{name} is unavailable until the MCP mutation confirmation policy is implemented (W9.3)"
+                  else
+                    "Tool #{name} requires explicit confirmation; MCP mutations are unavailable until W9.3"
+                  end
+        return { "content" => [{ "type" => "text", "text" => message }], "isError" => true }
       end
+
+      # Resolve path arguments before CLI parsing so names such as --help remain literal files.
+      arguments = arguments.dup
+      tool.arguments.each do |argument|
+        key = argument.fetch("name")
+        next unless PATH_ARGUMENTS.include?(key) && arguments.key?(key)
+
+        arguments[key] = Pathname(arguments.fetch(key)).expand_path(@workspace_root).to_s
+      end
+      argv = @tools.dispatch(name, arguments)
+      @executor.call(argv)
     end
 
     def prompt_payload(prompt)
@@ -311,12 +309,6 @@ module OPSd
     def write_json(payload)
       @output.write(JSON.generate(payload) + "\n")
       @output.flush if @output.respond_to?(:flush)
-    end
-
-    def stringify_keys(hash)
-      hash.each_with_object({}) do |(key, value), memo|
-        memo[key.to_s] = value
-      end
     end
 
     def truthy?(value)

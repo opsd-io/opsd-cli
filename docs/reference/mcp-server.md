@@ -106,8 +106,11 @@ The independent suite uses the official Python MCP SDK `2.3.0` with protocol
 mode explicitly set to `2026-07-28`, so it cannot pass by falling back to the
 legacy handshake. It checks discovery, catalogs, resource reads, prompt
 rendering, confirmation refusal, and error recovery against the real launcher
-in a temporary workspace. Real tool execution is covered as it is implemented
-in W9.2; final workflow and portable-bundle qualification belong to W9.6.
+in a temporary workspace. Execution tests verify actual CLI results for
+blueprint discovery, manifest validation, config/plan/lifecycle verification,
+rendering and exit-pack export, including filesystem artifacts, error cases,
+literal path handling, and the temporary mutation block. Final combined
+workflow and portable-bundle qualification belong to W9.6.
 
 Wire tests validate actual request and response messages against the unmodified
 upstream JSON Schema, vendored under `test/mcp/schema/`. The source commit is
@@ -135,8 +138,8 @@ semantics:
 
 - read-only resources for contract, docs, blueprints, and supported paths
 - reusable prompts for inspect and verify workflows
-- tool calls for discovery, verification, rendering, packaging, and the
-  current mutation surface
+- executable tools for discovery, verification, rendering, and packaging
+- advertised mutation tools that remain blocked pending W9.3 confirmation support
 
 For the catalog details, see:
 
