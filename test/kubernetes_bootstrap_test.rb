@@ -186,6 +186,8 @@ class KubernetesBootstrapTest < Minitest::Test
   end
 
   def test_bootstrap_reads_gitops_repository_from_manifest
+    previous_app_root = ENV["OPSD_APP_ROOT"]
+    previous_workspace_root = ENV["OPSD_WORKSPACE_ROOT"]
     manifest_path = File.expand_path("../examples/kubernetes-environment.yaml", __dir__)
     manifest = OPSd::Manifest.new(YAML.load_file(manifest_path))
     captured_repositories = []
@@ -194,11 +196,29 @@ class KubernetesBootstrapTest < Minitest::Test
       captured_repositories << gitops_repository
     end
 
-    OPSd::KubernetesBootstrap.stub(:new, bootstrap) do
-      capture_io { OPSd::CLI.new(["bootstrap", "--manifest", manifest_path]).run }
+    Dir.mktmpdir("opsd-bootstrap-workspace-") do |workspace|
+      # Manifest loading needs provider metadata, independent of any developer module cache.
+      metadata_path = File.join(workspace, "modules", "digitalocean", "opsd.yaml")
+      FileUtils.mkdir_p(File.dirname(metadata_path))
+      File.write(metadata_path, YAML.dump("profiles" => { "compute" => { "kubernetes" => ["s-2vcpu-4gb"] } }))
+      ENV["OPSD_APP_ROOT"] = File.expand_path("..", __dir__)
+      ENV["OPSD_WORKSPACE_ROOT"] = workspace
+
+      failure = nil
+      _, stderr = capture_io do
+        OPSd::KubernetesBootstrap.stub(:new, bootstrap) do
+          OPSd::CLI.new(["bootstrap", "--manifest", manifest_path]).run
+        rescue SystemExit => error
+          failure = error
+        end
+      end
+      assert_nil failure, "Bootstrap CLI exited unexpectedly: #{stderr}"
     end
 
     assert_equal manifest.gitops_repository, captured_repositories.fetch(0)
+  ensure
+    ENV["OPSD_APP_ROOT"] = previous_app_root
+    ENV["OPSD_WORKSPACE_ROOT"] = previous_workspace_root
   end
 
   private
