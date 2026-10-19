@@ -89,6 +89,45 @@ The server does not implement `initialize`, `ping`, `shutdown`, or `exit` RPCs.
 Malformed JSON produces a parse error response; subsequent valid messages can
 still be processed. Unknown notifications are ignored without responses.
 
+## Protocol Qualification
+
+Run both local suites before changing the MCP protocol implementation:
+
+```bash
+sh scripts/ci/run_unit_cli_tests.sh
+sh scripts/ci/run_mcp_protocol_tests.sh
+```
+
+The protocol runner requires the activated repository Ruby, Python 3.11, and
+[`uv`](https://docs.astral.sh/uv/) (CI uses `0.13.1`). Its first run downloads
+locked Python test dependencies; the CLI itself still has no Python dependency.
+
+The independent suite uses the official Python MCP SDK `2.3.0` with protocol
+mode explicitly set to `2026-07-28`, so it cannot pass by falling back to the
+legacy handshake. It checks discovery, catalogs, resource reads, prompt
+rendering, confirmation refusal, and error recovery against the real launcher
+in a temporary workspace. Real tool execution is covered as it is implemented
+in W9.2; final workflow and portable-bundle qualification belong to W9.6.
+
+Wire tests validate actual request and response messages against the unmodified
+upstream JSON Schema, vendored under `test/mcp/schema/`. The source commit is
+`271ecc9accafdd9b83a3c869fa67c22953b2af80`; `provenance.json` records its source
+URL and SHA-256. The upstream license is preserved alongside it. Schema checks
+resolve local references only, without fetching schemas during test execution.
+Deliberately malformed request fixtures and corrupted response copies must
+fail validation, independently of OPSd's serializers and Ruby test helpers.
+
+The `MCP protocol` GitHub Actions workflow runs both suites on every pull
+request and on `main`. RPC reads and process shutdown are bounded, and child
+processes are cleaned up on failure. The tests require no cloud credentials.
+
+To update dependencies, edit `test/mcp/pyproject.toml`, regenerate
+`test/mcp/uv.lock` with `uv lock --project test/mcp`, and run both suites.
+To update the official schema, select an immutable upstream commit, replace
+the unmodified schema and license, update `provenance.json` (including its
+SHA-256), and rerun the tests; never relax the schema to accommodate a server
+regression.
+
 ## Supported Surface
 
 The server exposes the existing OPSd catalogs without adding new contract
