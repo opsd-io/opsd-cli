@@ -7,7 +7,17 @@ require_relative "template_store"
 
 module OPSd
   class McpToolCatalog
-    Tool = Struct.new(:name, :description, :arguments, :cli, :requires_confirmation, keyword_init: true)
+    Tool = Struct.new(:name, :description, :arguments, :cli, :requires_confirmation, keyword_init: true) do
+      def effect
+        return "manifest-mutation" if requires_confirmation
+        return "generated-files" if %w[render-manifest export-exit-pack].include?(name)
+
+        "read-only"
+      end
+    end
+
+    CONFIRMATION_DESCRIPTION = "Set true only after the host obtains explicit user approval for this tool " \
+                               "and its exact arguments. A model-generated value alone is not consent."
 
     def initialize(app_root:, workspace_root:, contract_store: nil, template_store: nil)
       @app_root = Pathname(app_root).expand_path
@@ -36,7 +46,7 @@ module OPSd
       entry = tool(name)
       raise "Unsupported MCP tool: #{name}" if entry.nil?
 
-      if entry.requires_confirmation && !confirmed
+      if entry.requires_confirmation && confirmed != true
         raise "Tool #{name} requires explicit confirmation"
       end
 
@@ -133,7 +143,7 @@ module OPSd
         ),
         Tool.new(
           name: "render-manifest",
-          description: "Render a validated manifest into a runnable OpenTofu stack.",
+          description: "Render a validated manifest into a runnable OpenTofu stack. Writes generated files and the CLI lock file.",
           arguments: [
             { "name" => "manifest_path", "required" => true, "description" => "Path to a manifest file" },
             { "name" => "output_dir", "required" => true, "description" => "Directory for rendered output" }
@@ -143,7 +153,7 @@ module OPSd
         ),
         Tool.new(
           name: "export-exit-pack",
-          description: "Bundle rendered OPSd output into a portable exit pack.",
+          description: "Bundle rendered OPSd output into a portable exit pack. Writes an archive at output_path.",
           arguments: [
             { "name" => "rendered_dir", "required" => true, "description" => "Rendered output directory" },
             { "name" => "output_path", "required" => true, "description" => "Exit-pack archive path" }
@@ -219,7 +229,13 @@ module OPSd
           cli: ["remove"],
           requires_confirmation: true
         )
-      ]
+      ].each do |entry|
+        next unless entry.requires_confirmation
+
+        entry.arguments << { "name" => "confirmed", "required" => false, "description" => CONFIRMATION_DESCRIPTION }
+        entry.description += " Modifies the manifest file only; does not apply infrastructure. " \
+                             "Requires explicit user confirmation through the host."
+      end
     end
 
     private
@@ -230,6 +246,7 @@ module OPSd
         "description" => entry.description,
         "arguments" => entry.arguments,
         "requires_confirmation" => entry.requires_confirmation,
+        "effect" => entry.effect,
         "cli" => entry.cli
       }
     end

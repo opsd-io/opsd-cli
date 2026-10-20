@@ -105,7 +105,7 @@ locked Python test dependencies; the CLI itself still has no Python dependency.
 The independent suite uses the official Python MCP SDK `2.3.0` with protocol
 mode explicitly set to `2026-07-28`, so it cannot pass by falling back to the
 legacy handshake. It checks discovery, catalogs, resource reads, prompt
-rendering, confirmation refusal, and error recovery against the real launcher
+rendering, confirmation metadata, refusal, and error recovery against the real launcher
 in a temporary workspace. Execution tests verify actual CLI results for
 blueprint discovery, manifest validation, config/plan/lifecycle verification,
 rendering and exit-pack export, including filesystem artifacts, error cases,
@@ -139,7 +139,11 @@ semantics:
 - read-only resources for contract, docs, blueprints, and supported paths
 - reusable prompts for inspect and verify workflows
 - executable tools for discovery, verification, rendering, and packaging
-- advertised mutation tools that remain blocked pending W9.3 confirmation support
+- executable manifest mutation tools gated by explicit user confirmation through the host
+
+Manifest mutations require `arguments.confirmed: true` on every call after the
+host obtains user approval. See the [confirmation contract](./mcp-tools.md#effects-and-confirmation)
+for effects, refusal behavior, and the limits of this gate.
 
 For the catalog details, see:
 

@@ -67,14 +67,16 @@ class McpToolCatalogTest < Minitest::Test
   def test_dispatch_requires_confirmation_for_risky_tools
     catalog = tool_catalog(fixture_workspace_root)
 
-    error = assert_raises(RuntimeError) do
-      catalog.dispatch(
-        "remove-resource",
-        { "resource" => "database", "manifest_path" => "demo.yaml", "resource_id" => "db-main" }
-      )
+    [false, nil, "true", 1].each do |confirmed|
+      error = assert_raises(RuntimeError) do
+        catalog.dispatch(
+          "remove-resource",
+          { "resource" => "database", "manifest_path" => "demo.yaml", "resource_id" => "db-main" },
+          confirmed: confirmed
+        )
+      end
+      assert_equal "Tool remove-resource requires explicit confirmation", error.message
     end
-
-    assert_equal "Tool remove-resource requires explicit confirmation", error.message
   end
 
   def test_dispatch_of_confirmed_risky_tool_returns_cli_arguments
