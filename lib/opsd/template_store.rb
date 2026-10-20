@@ -164,11 +164,12 @@ module OPSd
     end
 
     def provider_roots
-      @provider_roots ||= discover_provider_roots
+      # Long-lived MCP sessions can synchronize modules between catalog reads.
+      discover_provider_roots
     end
 
     def cached_provider_roots
-      @cached_provider_roots ||= discover_cached_provider_roots
+      discover_cached_provider_roots
     end
 
     def discover_provider_roots

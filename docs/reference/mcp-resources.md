@@ -30,7 +30,7 @@ their machine-readable payloads.
 
 - `opsd://docs/pointers`
   - stable links to the canonical docs entrypoints for manifest, commands,
-    packaging, exit packs, and quickstart
+    packaging, exit packs, MCP tool mapping, and quickstart
 
 ## Payload Format
 
@@ -68,3 +68,6 @@ modules have been installed. Blueprint reads do not synchronize modules.
 When a local blueprint directory is absent, cached catalogs prefer `main`,
 then the lexicographically greatest available release directory, matching
 unpinned CLI lookup. Provider metadata follows the same cache ordering.
+
+Blueprint catalog lookups refresh module directories on each read, so a
+successful explicit `modules-sync` is visible within the same MCP session.

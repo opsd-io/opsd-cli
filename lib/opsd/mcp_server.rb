@@ -236,7 +236,7 @@ module OPSd
         "annotations" => {
           "readOnlyHint" => tool.fetch("effect") == "read-only",
           "destructiveHint" => tool.fetch("effect") != "read-only",
-          "openWorldHint" => false
+          "openWorldHint" => %w[modules-sync validate-manifest].include?(tool.fetch("name"))
         },
         "_meta" => {
           "io.opsd/effect" => tool.fetch("effect"),
@@ -248,7 +248,7 @@ module OPSd
             properties[argument.fetch("name")] = schema_for_argument(argument)
           end,
           "required" => tool.fetch("arguments").select { |argument| argument.fetch("required") }.map { |argument| argument.fetch("name") },
-          "additionalProperties" => true
+          "additionalProperties" => false
         }
       }
     end
@@ -273,6 +273,10 @@ module OPSd
     end
 
     def validate_arguments(definitions, arguments, prompt: false)
+      unless prompt
+        unknown = arguments.keys - definitions.map { |argument| argument.fetch("name") }
+        raise jsonrpc_error(-32602, "Unknown tool argument: #{unknown.first}") unless unknown.empty?
+      end
       definitions.each do |argument|
         name = argument.fetch("name")
         if argument.fetch("required") && !arguments.key?(name)
@@ -280,11 +284,12 @@ module OPSd
         end
         next unless arguments.key?(name)
 
-        type = prompt ? "string" : argument_type(name)
+        type = prompt ? "string" : argument.fetch("type", argument_type(name))
         value = arguments.fetch(name)
         valid = case type
                 when "integer" then value.is_a?(Integer)
                 when "boolean" then value == true || value == false
+                when "array" then value.is_a?(Array) && value.all? { |item| item.is_a?(String) }
                 else value.is_a?(String)
                 end
         raise jsonrpc_error(-32602, "#{name} must be a #{type}") unless valid
@@ -317,10 +322,9 @@ module OPSd
     end
 
     def schema_for_argument(argument)
-      {
-        "type" => argument_type(argument.fetch("name")),
-        "description" => argument.fetch("description")
-      }
+      argument.reject { |key, _| %w[name required].include?(key) }.merge(
+        "type" => argument.fetch("type", argument_type(argument.fetch("name")))
+      )
     end
 
     def argument_type(name)

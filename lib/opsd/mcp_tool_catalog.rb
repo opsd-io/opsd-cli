@@ -9,8 +9,9 @@ module OPSd
   class McpToolCatalog
     Tool = Struct.new(:name, :description, :arguments, :cli, :requires_confirmation, keyword_init: true) do
       def effect
+        return "dependency-sync" if name == "modules-sync"
         return "manifest-mutation" if requires_confirmation
-        return "generated-files" if %w[render-manifest export-exit-pack].include?(name)
+        return "generated-files" if %w[validate-manifest render-manifest export-exit-pack].include?(name)
 
         "read-only"
       end
@@ -56,7 +57,11 @@ module OPSd
       when "describe-blueprint"
         render_describe_blueprint(parameters)
       when "validate-manifest"
-        render_cli("validate", "manifest", parameters.fetch("manifest_path"))
+        render_cli("validate", "manifest", parameters.fetch("manifest_path"),
+                   parameters["platform"] == true ? "--platform" : nil,
+                   parameters["offline"] == true ? "--offline" : nil)
+      when "modules-sync"
+        render_cli("modules", "sync", parameters.fetch("manifest_path"), parameters["update"] == true ? "--update" : nil)
       when "verify-config"
         render_cli("verify", "config", parameters.fetch("manifest_path"))
       when "verify-plan"
@@ -64,7 +69,8 @@ module OPSd
       when "verify-lifecycle"
         render_cli("verify", "lifecycle", parameters.fetch("snapshot_path"))
       when "render-manifest"
-        render_cli("render", "manifest", parameters.fetch("manifest_path"), "--output", parameters.fetch("output_dir"))
+        render_cli("render", "manifest", parameters.fetch("manifest_path"), "--output", parameters.fetch("output_dir"),
+                   parameters["include_platform"] == true ? "--include-platform" : nil)
       when "export-exit-pack"
         render_cli("export", "exit-pack", parameters.fetch("rendered_dir"), "--output", parameters.fetch("output_path"))
       when "add-compute-group"
@@ -107,9 +113,14 @@ module OPSd
         ),
         Tool.new(
           name: "validate-manifest",
-          description: "Validate a manifest against the OPSd contract and capability rules.",
+          description: "Validate a manifest; platform validation runs Terraform, OpenTofu, Helm, and kubeconform. " \
+                       "Online platform validation can populate caches; offline requires prepared caches.",
           arguments: [
-            { "name" => "manifest_path", "required" => true, "description" => "Path to a manifest file" }
+            { "name" => "manifest_path", "required" => true, "description" => "Path to a manifest file" },
+            { "name" => "platform", "required" => false, "type" => "boolean", "default" => false,
+              "description" => "Validate rendered infrastructure and Kubernetes platform (--platform)" },
+            { "name" => "offline", "required" => false, "type" => "boolean", "default" => false,
+              "description" => "Use only prepared validation caches; requires platform=true (--offline)" }
           ],
           cli: ["validate", "manifest"],
           requires_confirmation: false
@@ -146,7 +157,9 @@ module OPSd
           description: "Render a validated manifest into a runnable OpenTofu stack. Writes generated files and the CLI lock file.",
           arguments: [
             { "name" => "manifest_path", "required" => true, "description" => "Path to a manifest file" },
-            { "name" => "output_dir", "required" => true, "description" => "Directory for rendered output" }
+            { "name" => "output_dir", "required" => true, "description" => "Directory for rendered output" },
+            { "name" => "include_platform", "required" => false, "type" => "boolean", "default" => false,
+              "description" => "Render platform from synchronized modules and cached charts without updating pins (--include-platform)" }
           ],
           cli: ["render", "manifest"],
           requires_confirmation: false
@@ -162,6 +175,19 @@ module OPSd
           requires_confirmation: false
         ),
         Tool.new(
+          name: "modules-sync",
+          description: "Explicitly synchronize provider and Kubernetes modules and Helm archives. " \
+                       "Writes managed module trees, caches, and opsd.lock.yaml; may download dependencies. " \
+                       "Preserves existing pins unless update=true is explicitly requested.",
+          arguments: [
+            { "name" => "manifest_path", "required" => true, "description" => "Path to a manifest file" },
+            { "name" => "update", "required" => false, "type" => "boolean", "default" => false,
+              "description" => "Explicitly resolve refs and update dependency pins (--update)" }
+          ],
+          cli: ["modules", "sync"],
+          requires_confirmation: true
+        ),
+        Tool.new(
           name: "add-compute-group",
           description: "Add a compute group to a manifest.",
           arguments: [
@@ -169,7 +195,14 @@ module OPSd
             { "name" => "id", "required" => true, "description" => "Compute group id" },
             { "name" => "role", "required" => true, "description" => "Compute group role" },
             { "name" => "type", "required" => true, "description" => "Compute type" },
-            { "name" => "profile", "required" => true, "description" => "Provider profile slug" }
+            { "name" => "profile", "required" => true, "description" => "Provider profile slug" },
+            { "name" => "replicas", "required" => false, "type" => "integer", "default" => 1, "description" => "Replica count" },
+            { "name" => "image", "required" => false, "description" => "Provider image identifier" },
+            { "name" => "port", "required" => false, "type" => "integer", "description" => "Service port" },
+            { "name" => "attach_to", "required" => false, "type" => "array", "items" => { "type" => "string" },
+              "description" => "Load balancer ids (--attach-to per entry)" },
+            { "name" => "links", "required" => false, "type" => "array", "items" => { "type" => "string" },
+              "description" => "Linked resource ids (--link per entry)" }
           ],
           cli: ["add", "compute-group"],
           requires_confirmation: true
@@ -233,8 +266,8 @@ module OPSd
         next unless entry.requires_confirmation
 
         entry.arguments << { "name" => "confirmed", "required" => false, "description" => CONFIRMATION_DESCRIPTION }
-        entry.description += " Modifies the manifest file only; does not apply infrastructure. " \
-                             "Requires explicit user confirmation through the host."
+        entry.description += " Modifies the manifest file only; does not apply infrastructure." if entry.effect == "manifest-mutation"
+        entry.description += " Requires explicit user confirmation through the host."
       end
     end
 

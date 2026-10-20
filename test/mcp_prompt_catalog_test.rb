@@ -16,6 +16,7 @@ class McpPromptCatalogTest < Minitest::Test
       inspect-manifest
       verify-config
       verify-plan
+      prepare-platform
       export-exit-pack
     ], names
   end

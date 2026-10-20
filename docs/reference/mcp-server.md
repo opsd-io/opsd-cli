@@ -69,9 +69,10 @@ profile.
 
 MCP sets `OPSD_MODULES_OFFLINE=1` for CLI subprocesses, using prepared local
 modules or existing workspace release caches. Missing modules return an
-operational tool error with `opsd modules sync <manifest.yaml>` guidance;
-MCP never downloads them automatically. Run synchronization explicitly outside
-MCP in the selected workspace. Pinned rendering checks synchronized module
+operational tool error with `opsd modules sync <manifest.yaml>` guidance.
+The explicit `modules-sync` tool requires user confirmation and permits module
+downloads; it is the only tool that disables the module-resolution restriction.
+Synchronization can also be performed directly through the CLI. Pinned rendering checks synchronized module
 integrity and refuses changed or missing pinned modules. Direct CLI execution
 keeps its normal module resolution behavior unless this environment flag is set.
 
@@ -132,7 +133,10 @@ rendering, confirmation metadata, refusal, and error recovery against the real l
 in a temporary workspace. Execution tests verify actual CLI results for
 blueprint discovery, manifest validation, config/plan/lifecycle verification,
 rendering and exit-pack export, including filesystem artifacts, error cases,
-literal path handling, and confirmed mutations. Workspace tests cover app-owned
+literal path handling, and confirmed mutations. Platform workflow tests execute synchronization with
+local Git repositories, check rendered artifacts and preserved pins, and use
+external-tool stand-ins to verify option forwarding and offline cache behavior.
+Workspace tests cover app-owned
 resources, missing modules, cached catalogs, profile selection, stale module
 pins, and execution from an unrelated host directory. Final combined
 workflow and portable-bundle qualification belong to W9.6.

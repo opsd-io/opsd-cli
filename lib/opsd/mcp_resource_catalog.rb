@@ -201,6 +201,13 @@ module OPSd
             "description" => "Portable handoff archive exported from rendered output"
           },
           {
+            "id" => "mcp-tools",
+            "title" => "MCP Tool Mapping",
+            "path_root" => "app",
+            "path" => "docs/reference/mcp-tools.md",
+            "description" => "Supported MCP arguments, explicit synchronization, and platform qualification"
+          },
+          {
             "id" => "quickstart",
             "title" => "Quickstart",
             "path_root" => "app",
