@@ -3,7 +3,9 @@
 OPSd exposes reusable prompt templates for common read and review workflows.
 
 These prompts are designed for MCP hosts that want to guide a user through a
-standard OPSd task without inventing a new workflow layer.
+standard OPSd task without inventing a new workflow layer. Prompt retrieval
+never executes tools or supplies user approval. Tool names, typed arguments,
+and CLI-only setup steps are documented in [MCP Tools](./mcp-tools.md).
 
 ## Prompt Catalog
 
@@ -15,6 +17,9 @@ standard OPSd task without inventing a new workflow layer.
   - explain config verification findings for a manifest
 - `verify-plan`
   - explain plan verification findings and reversibility concerns
+- `prepare-platform`
+  - guide approved `modules-sync`, pinned `include_platform` rendering, and
+    platform/offline validation without silently updating pins or retrying online
 - `export-exit-pack`
   - guide export of a rendered handoff into an exit pack
 

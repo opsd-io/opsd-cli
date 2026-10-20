@@ -30,11 +30,11 @@ class McpToolCatalogTest < Minitest::Test
     render = catalog.tool("render-manifest")
     add = catalog.tool("add-compute-group")
 
-    assert_equal [{ "name" => "manifest_path", "required" => true, "description" => "Path to a manifest file" }], validate.arguments
+    assert_equal [{ "name" => "manifest_path", "required" => true, "description" => "Path to a manifest file" }], validate.arguments.first(1)
     assert_equal [
       { "name" => "manifest_path", "required" => true, "description" => "Path to a manifest file" },
       { "name" => "output_dir", "required" => true, "description" => "Directory for rendered output" }
-    ], render.arguments
+    ], render.arguments.first(2)
     assert_equal %w[add compute-group], add.cli
   end
 

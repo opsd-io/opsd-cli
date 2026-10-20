@@ -26,6 +26,7 @@ module OPSd
         inspect_manifest_prompt,
         verify_config_prompt,
         verify_plan_prompt,
+        prepare_platform_prompt,
         export_exit_pack_prompt
       ]
     end
@@ -152,6 +153,31 @@ module OPSd
       )
     end
 
+    def prepare_platform_prompt
+      Prompt.new(
+        name: "prepare-platform",
+        description: "Guide explicit module synchronization, pinned platform rendering, and offline validation.",
+        arguments: [
+          { "name" => "manifest_path", "required" => true, "description" => "Path to a Kubernetes manifest" },
+          { "name" => "output_dir", "required" => true, "description" => "Directory for rendered output" }
+        ],
+        template: <<~PROMPT
+          Prepare the Kubernetes platform for `{{manifest_path}}` in the selected workspace.
+          Read `opsd://contract` and the app documentation pointers at `opsd://docs/pointers`.
+          Check the selected profile and required Git, Helm, Terraform, OpenTofu, and kubeconform tools.
+          Obtain explicit user approval before calling `modules-sync` with confirmed=true.
+          Keep update=false to preserve pins; obtain new approval before requesting update=true.
+          Call `render-manifest` with include_platform=true and output_dir=`{{output_dir}}`.
+          Call `validate-manifest` with platform=true and offline=true when caches are prepared.
+          If caches are missing, explain the error and the online cache preparation step
+          (platform=true, offline=false); do not silently retry online.
+          Rendering and validation must not update dependency pins. These steps do not apply
+          infrastructure or bootstrap a cluster. See app `docs/reference/mcp-tools.md` for
+          supported arguments and explicit CLI-only setup steps.
+        PROMPT
+      )
+    end
+
     def export_exit_pack_prompt
       Prompt.new(
         name: "export-exit-pack",
@@ -191,13 +217,13 @@ module OPSd
       parameters.each_with_object({}) do |(key, value), memo|
         memo[key.to_s] = value
       end.merge(
-        "supported_paths" => supported_paths_summary,
+        "supported_paths" => supported_paths_summary(parameters[:provider] || parameters["provider"] || "digitalocean"),
         "blueprint_variants" => blueprint_variants_summary(parameters[:provider] || parameters["provider"], parameters[:blueprint] || parameters["blueprint"])
       )
     end
 
-    def supported_paths_summary
-      @contract_store.supported_paths_for("digitalocean").map do |entry|
+    def supported_paths_summary(provider)
+      @contract_store.supported_paths_for(provider.to_s).map do |entry|
         "#{entry['blueprint']}:#{entry['variant']}"
       end.join(", ")
     end

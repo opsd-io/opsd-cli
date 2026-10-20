@@ -246,7 +246,7 @@ class McpConfirmationDiscoveryTest(unittest.TestCase):
             for tool in result["tools"]:
                 effect = tool["_meta"]["io.opsd/effect"]
                 required = tool["_meta"]["io.opsd/requiresConfirmation"]
-                self.assertEqual(effect == "manifest-mutation", required)
+                self.assertEqual(effect in ("manifest-mutation", "dependency-sync"), required)
                 self.assertEqual(effect == "read-only", tool["annotations"]["readOnlyHint"])
                 self.assertEqual(effect != "read-only", tool["annotations"]["destructiveHint"])
                 if required:
