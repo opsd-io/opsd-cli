@@ -202,14 +202,10 @@ module OPSd
       raise jsonrpc_error(-32602, "Unsupported MCP tool: #{name}") if tool.nil?
 
       validate_arguments(tool.arguments, arguments)
-      confirmed = truthy?(arguments["confirmed"] || arguments[:confirmed] || params["confirmed"] || params[:confirmed])
-
-      if tool.requires_confirmation
-        message = if confirmed
-                    "Tool #{name} is unavailable until the MCP mutation confirmation policy is implemented (W9.3)"
-                  else
-                    "Tool #{name} requires explicit confirmation; MCP mutations are unavailable until W9.3"
-                  end
+      confirmed = arguments["confirmed"] == true
+      if tool.requires_confirmation && !confirmed
+        message = "Tool #{name} requires explicit confirmation: the host must obtain user approval " \
+                  "for this operation and set arguments.confirmed to true"
         return { "content" => [{ "type" => "text", "text" => message }], "isError" => true }
       end
 
@@ -221,7 +217,7 @@ module OPSd
 
         arguments[key] = Pathname(arguments.fetch(key)).expand_path(@workspace_root).to_s
       end
-      argv = @tools.dispatch(name, arguments)
+      argv = @tools.dispatch(name, arguments, confirmed: confirmed)
       @executor.call(argv)
     end
 
@@ -237,6 +233,15 @@ module OPSd
       {
         "name" => tool.fetch("name"),
         "description" => tool.fetch("description"),
+        "annotations" => {
+          "readOnlyHint" => tool.fetch("effect") == "read-only",
+          "destructiveHint" => tool.fetch("effect") != "read-only",
+          "openWorldHint" => false
+        },
+        "_meta" => {
+          "io.opsd/effect" => tool.fetch("effect"),
+          "io.opsd/requiresConfirmation" => tool.fetch("requires_confirmation")
+        },
         "inputSchema" => {
           "type" => "object",
           "properties" => tool.fetch("arguments").each_with_object({}) do |argument, properties|
@@ -309,10 +314,6 @@ module OPSd
     def write_json(payload)
       @output.write(JSON.generate(payload) + "\n")
       @output.flush if @output.respond_to?(:flush)
-    end
-
-    def truthy?(value)
-      value == true || value.to_s == "true"
     end
 
     def schema_for_argument(argument)
