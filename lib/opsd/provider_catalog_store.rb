@@ -57,7 +57,7 @@ module OPSd
       preferred = releases_root.join("main", "modules", provider.to_s, "opsd.yaml")
       return preferred if preferred.file?
 
-      releases_root.children.select(&:directory?).sort_by(&:basename).each do |version_root|
+      releases_root.children.select(&:directory?).sort_by(&:basename).reverse_each do |version_root|
         path = version_root.join("modules", provider.to_s, "opsd.yaml")
         return path if path.file?
       end

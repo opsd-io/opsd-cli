@@ -67,8 +67,12 @@ module OPSd
 
       return resolve_local_workspace(provider) if local_provider_root(provider).join("blueprints").directory?
 
-      repo_url = repo_url_for(provider)
       requested_ref = repo_ref_for(provider)
+      if offline?
+        return resolve_cached_release(provider, requested_ref: requested_ref) || raise(missing_modules_message(provider))
+      end
+
+      repo_url = repo_url_for(provider)
 
       if repo_url
         version = requested_ref.nil? || requested_ref.empty? ? default_remote_ref(repo_url) : requested_ref
@@ -77,6 +81,8 @@ module OPSd
 
       resolve_cached_release(provider, requested_ref: requested_ref) || raise("Provider #{provider} is not supported yet.")
     rescue StandardError => e
+      raise e if offline?
+
       cached = resolve_cached_release(provider, requested_ref: requested_ref)
       return cached unless cached.nil?
 
@@ -113,6 +119,15 @@ module OPSd
     end
 
   private
+
+    def offline?
+      @env["OPSD_MODULES_OFFLINE"] == "1"
+    end
+
+    def missing_modules_message(provider)
+      "Provider modules for #{provider} are unavailable in #{@workspace_root}. " \
+        "Automatic downloads are disabled; prepare this workspace with `opsd modules sync <manifest.yaml>` first."
+    end
 
     def provider_status(provider)
       return "reference" unless @contract_store
@@ -194,6 +209,9 @@ module OPSd
       workspace_root = release_workspace_root(provider, version)
       repo_root = workspace_root.join("modules", provider)
 
+      if offline? && !repo_root.directory?
+        raise missing_modules_message(provider)
+      end
       sync_remote_release!(provider, repo_url, version, repo_root)
       commit = run_git!(%W[-C #{repo_root} rev-parse HEAD]).strip
 

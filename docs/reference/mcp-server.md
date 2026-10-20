@@ -50,7 +50,30 @@ of OPSd:
 - `OPSD_WORKSPACE_ROOT` defaults to `OPSD_APP_ROOT`
 
 If you want to point the server at a separate workspace, set
-`OPSD_WORKSPACE_ROOT` before launching it.
+`OPSD_WORKSPACE_ROOT` before launching it. Use absolute paths; generated host
+configuration expands both roots to absolute paths. The launcher's location
+selects the default app, so starting it from another directory does not select
+that directory as the workspace.
+
+Contracts, docs, and examples belong to the app. Module catalogs, profiles,
+manifest paths, and generated output belong to the selected workspace. See
+[resource ownership](./mcp-resources.md#ownership-and-workspace-lookup) for
+lookup rules and missing-content behavior.
+
+Tool subprocesses run in the selected workspace. `OPSD_PROFILE` overrides the
+workspace's `.opsd/config` current profile; otherwise the CLI uses that current
+profile. The host's working directory and its configuration are not consulted.
+A missing profile produces CLI setup guidance rather than selecting a default
+provider. Resource URIs with explicit providers remain available without a
+profile.
+
+MCP sets `OPSD_MODULES_OFFLINE=1` for CLI subprocesses, using prepared local
+modules or existing workspace release caches. Missing modules return an
+operational tool error with `opsd modules sync <manifest.yaml>` guidance;
+MCP never downloads them automatically. Run synchronization explicitly outside
+MCP in the selected workspace. Pinned rendering checks synchronized module
+integrity and refuses changed or missing pinned modules. Direct CLI execution
+keeps its normal module resolution behavior unless this environment flag is set.
 
 ## Discovery Flow
 
@@ -109,7 +132,9 @@ rendering, confirmation metadata, refusal, and error recovery against the real l
 in a temporary workspace. Execution tests verify actual CLI results for
 blueprint discovery, manifest validation, config/plan/lifecycle verification,
 rendering and exit-pack export, including filesystem artifacts, error cases,
-literal path handling, and the temporary mutation block. Final combined
+literal path handling, and confirmed mutations. Workspace tests cover app-owned
+resources, missing modules, cached catalogs, profile selection, stale module
+pins, and execution from an unrelated host directory. Final combined
 workflow and portable-bundle qualification belong to W9.6.
 
 Wire tests validate actual request and response messages against the unmodified

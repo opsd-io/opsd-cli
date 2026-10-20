@@ -200,7 +200,7 @@ module OPSd
       preferred = releases_root.join("main", "modules", provider, "blueprints")
       return preferred if preferred.directory?
 
-      candidates = releases_root.children.select(&:directory?).sort_by(&:basename)
+      candidates = releases_root.children.select(&:directory?).sort_by(&:basename).reverse
       candidates.each do |version_root|
         blueprint_root = version_root.join("modules", provider, "blueprints")
         return blueprint_root if blueprint_root.directory?

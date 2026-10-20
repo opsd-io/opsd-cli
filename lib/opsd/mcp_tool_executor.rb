@@ -19,7 +19,9 @@ module OPSd
       env = {
         "OPSD_APP_ROOT" => @app_root.to_s,
         "OPSD_WORKSPACE_ROOT" => @workspace_root.to_s,
-        "RUBY_BIN" => RbConfig.ruby
+        "RUBY_BIN" => RbConfig.ruby,
+        # MCP uses prepared workspace modules; setup must be an explicit CLI action.
+        "OPSD_MODULES_OFFLINE" => "1"
       }
       launcher = @app_root.join("bin", "opsd").to_s
       # An explicit executable/argv pair prevents shell interpretation, including for a single argument.

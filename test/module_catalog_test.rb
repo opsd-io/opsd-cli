@@ -53,6 +53,41 @@ class ModuleCatalogTest < Minitest::Test
     end
   end
 
+  def test_offline_resolution_never_contacts_remote_or_creates_cache
+    Dir.mktmpdir("opsd-offline-modules") do |workspace|
+      catalog = OPSd::ModuleCatalog.new(workspace_root: workspace, env: { "OPSD_MODULES_OFFLINE" => "1" })
+      def catalog.run_git!(_args)
+        raise "Unexpected remote Git command"
+      end
+
+      error = assert_raises(RuntimeError) { catalog.resolve("digitalocean") }
+      assert_includes error.message, "opsd modules sync"
+      refute File.exist?(File.join(workspace, ".opsd"))
+
+      lock = File.join(workspace, "opsd.lock.yaml")
+      File.write(lock, YAML.dump("provider_modules" => {
+        "provider" => "digitalocean", "repo" => "https://example.invalid/modules.git",
+        "version" => "v1.0.0", "commit" => "a" * 40
+      }))
+      error = assert_raises(RuntimeError) { catalog.resolve("digitalocean", lockfile_path: lock) }
+      assert_includes error.message, "Automatic downloads are disabled"
+      refute File.exist?(File.join(workspace, ".opsd"))
+    end
+  end
+
+  def test_offline_resolution_reuses_workspace_cache
+    Dir.mktmpdir("opsd-offline-cache") do |workspace|
+      release = File.join(workspace, ".opsd", "cache", "releases", "digitalocean", "main")
+      FileUtils.mkdir_p(File.join(release, "modules", "digitalocean", "blueprints"))
+      catalog = OPSd::ModuleCatalog.new(workspace_root: workspace, env: { "OPSD_MODULES_OFFLINE" => "1" })
+      def catalog.run_git!(_args)
+        raise "Unexpected remote Git command"
+      end
+
+      assert_equal release, catalog.resolve("digitalocean").fetch(:workspace_root).to_s
+    end
+  end
+
   def test_default_cache_root_is_scoped_to_workspace
     Dir.mktmpdir("opsd-workspace") do |workspace|
       catalog = OPSd::ModuleCatalog.new(workspace_root: workspace)

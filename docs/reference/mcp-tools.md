@@ -54,7 +54,9 @@ Timeouts terminate the command's process group, including subprocesses.
 Configure a workspace profile and provider modules as for the CLI. In
 particular, blueprint discovery and manifest commands use the selected profile
 and provider catalogs; MCP does not silently create a profile or synchronize
-modules. `render-manifest` writes generated files and the CLI lock file;
+modules. Tool subprocesses set `OPSD_MODULES_OFFLINE=1`; prepare missing
+modules explicitly with `opsd modules sync <manifest.yaml>` outside MCP.
+`render-manifest` writes generated files and the CLI lock file;
 `export-exit-pack` writes an archive. Existing CLI overwrite protections apply.
 See [Setup](../getting-started/setup.md) for workspace preparation.
 
