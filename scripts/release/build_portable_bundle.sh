@@ -43,10 +43,26 @@ cp "${APP_ROOT}/bin/opsd-mcp" "${BUNDLE_ROOT}/bin/opsd-mcp"
 chmod +x "${BUNDLE_ROOT}/bin/opsd-mcp"
 cp -R "${APP_ROOT}/lib" "${BUNDLE_ROOT}/lib"
 cp -R "${APP_ROOT}/composer" "${BUNDLE_ROOT}/composer"
+# MCP reads the installed contract, documentation pointers, and shipped examples.
+cp -R "${APP_ROOT}/docs" "${BUNDLE_ROOT}/docs"
+cp -R "${APP_ROOT}/examples" "${BUNDLE_ROOT}/examples"
 cp "${APP_ROOT}/README.md" "${BUNDLE_ROOT}/README.md"
 cp "${APP_ROOT}/LICENSE" "${BUNDLE_ROOT}/LICENSE"
 cp "${APP_ROOT}/.ruby-version" "${BUNDLE_ROOT}/.ruby-version"
 cp -R "${RUBY_PREFIX}" "${BUNDLE_ROOT}/runtime"
+
+# Ruby builds can embed their installation prefix; prepend the copied stdlib and
+# native extension paths before Ruby loads rbconfig or any application library.
+"${RUBY_BIN}" --disable-gems -rrbconfig -rpathname -e '
+  prefix = Pathname(ARGV.fetch(0))
+  paths = %w[rubylibdir rubyarchdir].map { |key| Pathname(RbConfig::CONFIG.fetch(key)).relative_path_from(prefix) }
+  puts "# Generated runtime lookup paths, relative to the extracted bundle."
+  puts %q(RUBYLIB=") + paths.map { |path| "${OPSD_RUBY_RUNTIME_ROOT}/#{path}" }.join(":") + %q(${RUBYLIB:+:${RUBYLIB}}")
+  puts "export RUBYLIB"
+  puts %q(LD_LIBRARY_PATH="${OPSD_RUBY_RUNTIME_ROOT}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}")
+  puts "export LD_LIBRARY_PATH"
+' "${RUBY_PREFIX}" > "${BUNDLE_ROOT}/runtime/environment.sh"
+"${RUBY_BIN}" "${APP_ROOT}/scripts/release/relocate_ruby_runtime.rb" "${BUNDLE_ROOT}/runtime" "${RUBY_PREFIX}"
 
 cat > "${BUNDLE_ROOT}/release.json" <<EOF
 {
@@ -54,7 +70,8 @@ cat > "${BUNDLE_ROOT}/release.json" <<EOF
   "version": "${VERSION}",
   "os": "${OS_NAME}",
   "arch": "${ARCH_NAME}",
-  "ruby_prefix": "${RUBY_PREFIX}"
+  "ruby_version": "${RUBY_VERSION}",
+  "ruby_runtime": "runtime"
 }
 EOF
 
@@ -69,5 +86,8 @@ trap cleanup EXIT INT TERM
 tar -xzf "${ARCHIVE_PATH}" -C "${VALIDATION_DIR}"
 "${VALIDATION_DIR}/$(basename "${BUNDLE_ROOT}")/bin/opsd" version >/dev/null
 "${VALIDATION_DIR}/$(basename "${BUNDLE_ROOT}")/bin/opsd-mcp" config >/dev/null
+
+# Fail before release upload if the extracted artifact cannot serve actual MCP workflows.
+sh "${APP_ROOT}/scripts/ci/run_mcp_bundle_tests.sh" "${ARCHIVE_PATH}" >&2
 
 echo "${ARCHIVE_PATH}"

@@ -28,7 +28,10 @@ script for the path you changed.
 
 For MCP changes, also run `sh scripts/ci/run_mcp_protocol_tests.sh` with `uv`
 and Python 3.11 available. See [MCP protocol qualification](./docs/reference/mcp-server.md#protocol-qualification)
-for the pinned official SDK/schema, local commands, and CI coverage.
+for the pinned official SDK/schema, local commands, and CI coverage. Packaging,
+runtime, or platform workflow changes also require
+`sh scripts/ci/run_mcp_real_tools_tests.sh` and a portable bundle build; the build
+runs SDK and real-tool qualification against the extracted artifact.
 
 ## Pull Requests And Commits
 

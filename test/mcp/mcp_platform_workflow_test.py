@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -30,7 +31,9 @@ def commit_repo(repo):
 
 
 def write_tool(path, source):
-    path.write_text(f"#!{os.environ['RUBY_BIN']}\n" + source)
+    # A shebang cannot represent an interpreter path containing spaces.
+    path.write_text("#!/bin/sh\nexec " + shlex.quote(os.environ["RUBY_BIN"]) +
+                    ' -x "$0" "$@"\n#!ruby\n' + source)
     path.chmod(0o755)
 
 

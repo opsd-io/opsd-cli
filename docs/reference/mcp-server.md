@@ -139,7 +139,7 @@ external-tool stand-ins to verify option forwarding and offline cache behavior.
 Workspace tests cover app-owned
 resources, missing modules, cached catalogs, profile selection, stale module
 pins, and execution from an unrelated host directory. Final combined
-workflow and portable-bundle qualification belong to W9.6.
+workflow and portable-bundle qualification run alongside these feature tests.
 
 Wire tests validate actual request and response messages against the unmodified
 upstream JSON Schema, vendored under `test/mcp/schema/`. The source commit is
@@ -181,3 +181,52 @@ For the catalog details, see:
 - [MCP Tools](./mcp-tools.md)
 
 For host-specific setup examples, see [MCP Host Configuration](./mcp-hosts.md).
+
+## Complete Workflow and Bundle Qualification
+
+The existing official SDK `2.3.0` and vendored schema pins are reused unchanged.
+The combined scenario performs discovery, resource/prompt reads, confirmation
+refusal and approved mutation, validation, pinned platform rendering, failure
+recovery, and exit-pack artifact checks in one temporary workspace.
+
+```bash
+sh scripts/ci/run_unit_cli_tests.sh
+sh scripts/ci/run_mcp_protocol_tests.sh
+sh scripts/ci/run_mcp_real_tools_tests.sh
+sh scripts/release/build_portable_bundle.sh
+# Requalify an existing archive:
+sh scripts/ci/run_mcp_bundle_tests.sh /absolute/path/to/opsd_<version>_<os>_<arch>.tar.gz
+```
+
+The fast SDK suite uses local repositories and external-tool stand-ins. The
+separate real-tools scenario uses Git, Helm, Terraform, OpenTofu, and kubeconform
+at the versions in `.tool-versions`. It fetches the exact public provider commit
+recorded in `test/mcp/fixtures/real-tools.json`, packages a tiny local Helm chart
+with the required CRDs, synchronizes explicit dependency pins, renders real
+artifacts, warms provider/schema caches online, and validates again offline
+with HTTP proxies directed at an unavailable local port. No cloud credentials,
+cluster access, plan/apply, or infrastructure provisioning are used.
+
+The real-tools scenario needs outbound access during initial source/plugin/schema
+preparation. Missing tools or version mismatches fail explicitly. `uv` and
+Python 3.11 are test/build dependencies, not installed-product dependencies.
+
+Portable qualification extracts the archive into a path containing spaces and
+launches it from an unrelated directory. It runs the same SDK/feature/combined
+suite and the real-tools scenario with the bundled runtime. It checks that Ruby
+and its loaded standard libraries resolve inside the extracted artifact.
+`OPSD_MCP_TEST_APP_ROOT` selects the artifact under test; SDK/schema fixtures
+remain in the source test tree. Test manifests, managed modules, caches, and
+output are temporary synthetic data.
+
+`MCP protocol` runs the fast suite on every PR and main push, and complete
+checkout/bundle qualification on Linux and macOS without path filters. Release
+Please waits for this reusable qualification workflow before creating a release.
+Every portable build also qualifies its extracted artifact before returning an
+archive for upload, including tag/manual release builds.
+
+RPC reads, complete sessions, setup subprocesses, and CI jobs have bounded
+waits; the official SDK and process-group cleanup tear down child processes.
+On CI failure, qualification logs and synthetic workflow diagnostics are retained
+as a seven-day artifact. Locally, set `OPSD_MCP_DIAGNOSTICS` to a diagnostics
+directory; real-tool failures otherwise write under `.tmp/mcp-diagnostics`.

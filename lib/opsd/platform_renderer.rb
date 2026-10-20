@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "json"
 require "fileutils"
 require "open3"
 require "pathname"
@@ -41,7 +42,8 @@ module OPSd
         values = deep_merge(values, component_values(manifest, module_id))
         values_dir = Pathname(Dir.mktmpdir("opsd-helm-values-"))
         values_path = values_dir.join("values.yaml")
-        values_path.write(YAML.dump(values))
+        # JSON values are accepted by Helm, including empty mappings without YAML document markers.
+        values_path.write(JSON.pretty_generate(values))
         begin
           run!("helm", "lint", chart_archive.to_s, "--values", values_path.to_s, "--namespace", helm_namespace(module_id))
           stdout, stderr, status = Open3.capture3(@env, "helm", "template", helm_release(module_id), chart_archive.to_s,
