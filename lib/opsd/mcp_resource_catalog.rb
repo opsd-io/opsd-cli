@@ -116,7 +116,8 @@ module OPSd
         "lifecycle" => deep_clone(contract["lifecycle"]),
         "rule_packs" => deep_clone(contract["rule_packs"]),
         "source" => {
-          "path" => relative_path(@contract_store.contract_path)
+          "path" => relative_path(@contract_store.contract_path, @app_root),
+          "path_root" => "app"
         }
       }
     end
@@ -152,7 +153,8 @@ module OPSd
 
         {
           "id" => data.dig("metadata", "name") || path.basename(".yaml").to_s,
-          "path" => relative_path(path),
+          "path" => relative_path(path, @app_root),
+          "path_root" => "app",
           "description" => example_description(data, path),
           "provider" => data.dig("spec", "provider"),
           "blueprint" => data.dig("spec", "origin", "blueprint"),
@@ -173,30 +175,35 @@ module OPSd
           {
             "id" => "manifest",
             "title" => "Manifest Contract",
+            "path_root" => "app",
             "path" => "docs/manifest.md",
             "description" => "Canonical v2 manifest contract and lifecycle"
           },
           {
             "id" => "commands",
             "title" => "Command Reference",
+            "path_root" => "app",
             "path" => "docs/reference/commands.md",
             "description" => "Supported CLI workflow and mutation commands"
           },
           {
             "id" => "packaging",
             "title" => "Release Packaging",
+            "path_root" => "app",
             "path" => "docs/release/packaging.md",
             "description" => "Release bundle, asdf plugin, and exit-pack packaging guidance"
           },
           {
             "id" => "exit-pack",
             "title" => "Exit Pack",
+            "path_root" => "app",
             "path" => "docs/exit-pack.md",
             "description" => "Portable handoff archive exported from rendered output"
           },
           {
             "id" => "quickstart",
             "title" => "Quickstart",
+            "path_root" => "app",
             "path" => "docs/getting-started/quickstart.md",
             "description" => "Shortest supported path from install to rendered output"
           }
@@ -213,7 +220,8 @@ module OPSd
         "audiences" => Array(blueprint[:audiences]),
         "provider" => blueprint[:provider],
         "variants" => Array(blueprint[:variants]).map { |variant| blueprint_variant_payload(variant) },
-        "path" => relative_path(blueprint[:path])
+        "path" => relative_path(blueprint[:path], @workspace_root),
+        "path_root" => "workspace"
       }
     end
 
@@ -244,25 +252,17 @@ module OPSd
     end
 
     def example_paths
-      @workspace_root.join("examples").children
-                     .select(&:file?)
-                     .select { |path| %w[.yaml .yml].include?(path.extname) }
-                     .sort_by(&:basename)
+      root = @app_root.join("examples")
+      return [] unless root.directory?
+
+      root.children
+          .select(&:file?)
+          .select { |path| %w[.yaml .yml].include?(path.extname) }
+          .sort_by(&:basename)
     end
 
-    def relative_path(path)
-      path = Pathname(path)
-      return path.to_s unless path.absolute?
-
-      [@app_root, @workspace_root].each do |base|
-        next unless path.to_s.start_with?(base.to_s)
-
-        return path.relative_path_from(base).to_s
-      rescue ArgumentError
-        next
-      end
-
-      path.to_s
+    def relative_path(path, root)
+      Pathname(path).relative_path_from(root).to_s
     rescue ArgumentError
       path.to_s
     end

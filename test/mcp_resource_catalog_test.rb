@@ -105,6 +105,30 @@ class McpResourceCatalogTest < Minitest::Test
     assert_includes docs.fetch("docs").map { |doc| doc.fetch("path") }, "docs/reference/commands.md"
   end
 
+  def test_application_resources_do_not_depend_on_workspace_content
+    Dir.mktmpdir("opsd-separate-workspace") do |workspace|
+      FileUtils.mkdir_p(File.join(workspace, "examples"))
+      File.write(File.join(workspace, "examples", "decoy.yaml"), "metadata: {name: workspace-decoy}")
+      catalog = resource_catalog(workspace)
+      examples = JSON.parse(catalog.read("opsd://examples")).fetch("examples")
+      assert_includes examples.map { |entry| entry.fetch("id") }, "acme-cluster-prod"
+      refute_includes examples.map { |entry| entry.fetch("id") }, "workspace-decoy"
+      examples.each do |entry|
+        assert_equal "app", entry.fetch("path_root")
+        assert File.file?(File.join(fixture_workspace_root, entry.fetch("path")))
+      end
+      assert_equal "app", JSON.parse(catalog.read("opsd://contract")).dig("source", "path_root")
+      assert_empty JSON.parse(catalog.read("opsd://catalog/blueprints/digitalocean")).fetch("blueprints")
+    end
+  end
+
+  def test_absent_application_examples_return_an_empty_list
+    Dir.mktmpdir("opsd-app-without-examples") do |app_root|
+      catalog = OPSd::McpResourceCatalog.new(app_root: app_root, workspace_root: app_root)
+      assert_equal({ "examples" => [] }, JSON.parse(catalog.read("opsd://examples")))
+    end
+  end
+
   def test_unknown_resource_uri_raises_a_clear_error
     catalog = resource_catalog(fixture_workspace_root)
 
