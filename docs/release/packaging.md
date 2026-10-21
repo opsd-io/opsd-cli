@@ -9,18 +9,27 @@ Do not confuse the release bundle with an `exit-pack`.
 
 ## Release Bundle
 
-For a released version such as `v1.0.0`, download the bundle that matches your platform:
+The portable installer selects the archive for your OS/architecture, verifies
+the published SHA-256 checksum and checks the embedded runtime before installing:
 
 ```bash
-curl -fL \
-  -o opsd_1.0.0_linux_amd64.tar.gz \
-  "https://github.com/opsd-io/opsd-cli/releases/download/v1.0.0/opsd_1.0.0_linux_amd64.tar.gz"
-tar -xzf opsd_1.0.0_linux_amd64.tar.gz
-./opsd_1.0.0_linux_amd64/bin/opsd version
+curl -fsSL https://raw.githubusercontent.com/opsd-io/opsd-cli/main/scripts/install.sh -o install-opsd.sh && sh install-opsd.sh
 ```
 
-The bundle includes its own Ruby runtime. You do not need Ruby installed on the host to run the
-extracted `bin/opsd`.
+This URL becomes available when the installer reaches `main`. Open a new
+terminal or run the printed activation command to use OPSd and its completion. The default
+installation directory is `~/opsd`; each installation is kept separately.
+No host Ruby is required. The installer adds PATH, app-root selection and
+completion to the detected Bash, Zsh, or Fish configuration, preserving existing
+settings. Reinstallation refreshes its setup without duplicate hooks. Use
+`--shell` to select a shell explicitly or `--no-shell-setup` to skip these changes.
+
+From a checkout, `sh scripts/install.sh --local` installs an archive you already
+have, while `sh scripts/install.sh --version 0.1.0` selects a published release.
+Use `--prefix` to choose another installation parent directory and `--help`
+for all options. A release version alone does not establish MCP compatibility;
+follow the [MCP user guide](../getting-started/mcp-setup.md#b-portable-bundle)
+for the currently qualified source/bundle paths.
 
 ## asdf
 

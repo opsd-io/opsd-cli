@@ -6,7 +6,17 @@ For the canonical setup walkthrough, see [Setup](./setup.md).
 
 ## 1. Create Or Select A Profile
 
+Run from the activated checkout (Ruby `3.4.10`) or extracted bundle. Select
+the workspace before creating a profile. The provider revision below is
+compatible with the current CLI; see [Setup](./setup.md) for the release caveat.
+For this cloud-free walkthrough, accept the default provider/region and leave
+the API token blank.
+
 ```bash
+export OPSD_APP_ROOT="$PWD"
+export OPSD_WORKSPACE_ROOT=/absolute/path/to/workspace
+mkdir -p "$OPSD_WORKSPACE_ROOT"
+export OPSD_MODULES_DIGITALOCEAN_REF=4394491d50ebd3b1c1c1b6e895577dadb59e6bb8
 bin/opsd config profile create work
 bin/opsd config profile use work
 ```
@@ -23,25 +33,37 @@ OPSD_PROFILE=work bin/opsd describe blueprint kubernetes-foundation
 ## 3. Initialize A Manifest
 
 ```bash
-OPSD_PROFILE=work bin/opsd init blueprint kubernetes-foundation demo.yaml --variant kubernetes
+OPSD_PROFILE=work bin/opsd init blueprint kubernetes-foundation "$OPSD_WORKSPACE_ROOT/demo.yaml" --variant kubernetes
 ```
 
 ## 4. Validate And Render
 
 ```bash
-OPSD_PROFILE=work bin/opsd validate manifest demo.yaml
-OPSD_PROFILE=work bin/opsd render manifest demo.yaml --output live/
+OPSD_PROFILE=work bin/opsd validate manifest "$OPSD_WORKSPACE_ROOT/demo.yaml"
+OPSD_PROFILE=work bin/opsd render manifest "$OPSD_WORKSPACE_ROOT/demo.yaml" --output "$OPSD_WORKSPACE_ROOT/live"
 ```
 
 ## Optional: Render The Kubernetes Platform
 
-For a Kubernetes manifest, synchronize its pinned module and chart sources,
-then render enabled platform components. Helm must be available in `PATH`.
+The initialized manifest has placeholder GitOps input. For a reproducible
+cloud-free check, use the shipped example, synchronize its module and chart
+sources, then render to a fresh directory. Git, Helm, Terraform, OpenTofu and
+kubeconform must be available in `PATH`.
 
 ```bash
-OPSD_PROFILE=work bin/opsd modules sync demo.yaml
-OPSD_PROFILE=work bin/opsd render manifest demo.yaml --output live/ --include-platform
-OPSD_PROFILE=work bin/opsd validate manifest demo.yaml --platform
+cp "$OPSD_APP_ROOT/examples/kubernetes-environment.yaml" "$OPSD_WORKSPACE_ROOT/platform-demo.yaml"
+```
+
+In `platform-demo.yaml`, set `spec.compute_groups[0].config.kubernetes_version`
+to a concrete version before platform validation. This walkthrough was tested
+with `1.33.0-do.0` (Kubernetes schemas `1.33.0`); the example's `latest` placeholder
+cannot select a versioned schema. For actual infrastructure, select a version
+supported by your provider.
+
+```bash
+OPSD_PROFILE=work bin/opsd modules sync "$OPSD_WORKSPACE_ROOT/platform-demo.yaml"
+OPSD_PROFILE=work bin/opsd render manifest "$OPSD_WORKSPACE_ROOT/platform-demo.yaml" --output "$OPSD_WORKSPACE_ROOT/platform" --include-platform
+OPSD_PROFILE=work bin/opsd validate manifest "$OPSD_WORKSPACE_ROOT/platform-demo.yaml" --platform
 ```
 
 Platform validation needs network access the first time so it can cache
@@ -51,10 +73,10 @@ warmed, add `--offline` to validate without network access.
 ## 5. Hand Off To OpenTofu
 
 ```bash
-cd live
+cd "$OPSD_WORKSPACE_ROOT/live"
 tofu init -backend=false -input=false
 tofu validate
 ```
 
-If you are using a workspace, set `OPSD_WORKSPACE_ROOT` to the directory that contains
-`modules/<provider>/*` before running the commands above.
+To connect through MCP after these CLI checks, follow the
+[verified compatibility matrix and connection steps](../reference/mcp-hosts.md).

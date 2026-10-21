@@ -1,0 +1,208 @@
+{
+  "recorded_on": "2026-10-21",
+  "server_protocol": "2026-07-28",
+  "server_base_revision": "1cb7da3652d75e01846320683b8dd80a36e2e25e",
+  "local_platform": "macOS 27.0.1 arm64",
+  "ruby_version": "3.4.10",
+  "independent_client": {
+    "name": "Official Python MCP SDK",
+    "version": "2.3.0",
+    "mode": "2026-07-28",
+    "status": "verified",
+    "installations": [
+      "checkout",
+      "extracted portable bundle"
+    ],
+    "evidence": "https://github.com/opsd-io/opsd-cli/actions/runs/39563873212",
+    "checks": [
+      "discovery",
+      "resource reads",
+      "validation",
+      "rendered files",
+      "confirmation",
+      "real-tool offline validation"
+    ]
+  },
+  "hosts": [
+    {
+      "name": "Codex CLI/app-server MCP runtime",
+      "version": "0.163.0-alpha.10.2",
+      "status": "incompatible",
+      "installations": [
+        "checkout",
+        "extracted portable bundle"
+      ],
+      "method": "local app-server with temporary configuration and an ephemeral session; no model invocation",
+      "observed_first_mcp_request_excerpt": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2025-06-18",
+          "clientInfo": {
+            "name": "codex-mcp-client",
+            "version": "0.163.0-alpha.10.2"
+          }
+        }
+      },
+      "observed_mcp_error": {
+        "code": -32601,
+        "message": "initialize is not supported; use MCP 2026-07-28 with per-request metadata"
+      },
+      "discovery_succeeded": false,
+      "successful_tool_call": false,
+      "additional_attempts": [
+        {
+          "setting": "CODEX_MCP_PROTOCOL_VERSION=2026-07-28 in the server entry environment",
+          "result": "Same legacy initialize request; discovery failed"
+        },
+        {
+          "setting": "CODEX_MCP_PROTOCOL_VERSION=2026-07-28 in the app-server process environment",
+          "result": "Same legacy initialize request; discovery failed"
+        }
+      ]
+    },
+    {
+      "name": "Codex desktop UI / IDE extension",
+      "status": "unverified",
+      "reason": "The CLI MCP runtime was exercised; no independent desktop UI or IDE tool-call qualification was performed."
+    },
+    {
+      "name": "Claude Desktop",
+      "installed_version": "2.31226.0",
+      "status": "unverified",
+      "reason": "Interactive discovery and tool-call qualification pending GUI access."
+    },
+    {
+      "name": "VS Code / Copilot",
+      "installed_vscode_version": "1.142.0",
+      "installed_vscode_commit": "6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1",
+      "status": "unverified",
+      "reason": "No interactive discovery and tool-call qualification performed."
+    }
+  ],
+  "generated_configuration_check": {
+    "status": "verified",
+    "installations": [
+      "checkout",
+      "extracted portable bundle"
+    ],
+    "environment": {
+      "PATH": "/usr/bin:/bin",
+      "RUBY_BIN": "absolute interpreter from generated configuration"
+    },
+    "checks": [
+      "read contract",
+      "validate manifest",
+      "render main.tf in selected workspace",
+      "leave unrelated host working directory unchanged"
+    ],
+    "test": "test_generated_configuration_runs_without_shell_ruby_in_gui_path"
+  },
+  "documented_setup": {
+    "test": "test/mcp/qualification/documented_setup.py",
+    "client": "Official Python MCP SDK 2.3.0, explicit 2026-07-28 mode",
+    "provider_commit": "4394491d50ebd3b1c1c1b6e895577dadb59e6bb8",
+    "observed_kubernetes_modules_commit": "7e6b6040d7f7c9128d83e4764fa67ca32c353006",
+    "schema_version": "1.33.0",
+    "checks": [
+      "token-free profile creation and selection via CLI",
+      "blueprint discovery and initialization via CLI",
+      "CLI manifest validation and rendering",
+      "real public module and Helm chart synchronization",
+      "platform rendering with Argo CD YAML",
+      "real platform validation online followed by offline with unavailable HTTP proxies",
+      "generated MCP configuration launched from an unrelated directory",
+      "MCP discovery, contract read, validation and rendered files",
+      "mutation refused without confirmation; manifest unchanged",
+      "operational error followed by successful validation"
+    ],
+    "documentation_fixes": [
+      "pin a compatible provider commit because latest published v0.1.0 generates obsolete layers",
+      "use absolute CLI paths and distinct render directories",
+      "configure GitOps input or use the shipped platform example",
+      "select a concrete Kubernetes version instead of latest for schema validation"
+    ],
+    "host_limit": "This CLI/SDK qualification does not qualify a GUI host.",
+    "results": {
+      "checkout": "passed",
+      "extracted_portable_bundle": "passed"
+    },
+    "ruby_suite": {
+      "tests": 190,
+      "assertions": 1411,
+      "failures": 0
+    },
+    "sdk_schema_suite": {
+      "tests": 31,
+      "failures": 0
+    }
+  },
+  "user_walkthrough": {
+    "document": "docs/getting-started/mcp-setup.md",
+    "results": {
+      "checkout": "passed",
+      "freshly_extracted_portable_bundle": "passed"
+    },
+    "method": "Executed the installation/workspace, CLI smoke, configuration generation and direct-stdio request blocks from the user guide in disposable workspaces. Platform online/offline steps are covered by documented_setup.py.",
+    "checks": [
+      "CLI profile, synchronization, validation and rendering",
+      "generated absolute launcher and Ruby path",
+      "four JSON-RPC responses without errors",
+      "successful MCP validation and rendering with zero exit codes",
+      "CLI and MCP artifacts exist",
+      "unrelated working directory unchanged"
+    ],
+    "copy_paste_checks": [
+      "no placeholder paths in executable guide blocks",
+      "missing archive rejected before installation directories are created",
+      "archive path containing spaces works",
+      "repeated installation preserves the previous directory",
+      "workspace is generated and profile creation succeeds",
+      "all guide shell blocks pass POSIX shell syntax validation"
+    ]
+  },
+  "portable_installer": {
+    "script": "scripts/install.sh",
+    "local_bundle": "verified: real relocated runtime, generated MCP configuration and discovery",
+    "download_mode": "verified with loopback release redirects, real curl and SHA-256 tools",
+    "regression_suite": {
+      "tests": 203,
+      "assertions": 1499,
+      "failures": 0
+    },
+    "checks": [
+      "local archive and interactive selection",
+      "paths containing spaces and single quotes",
+      "missing/empty/corrupt/incomplete local archive",
+      "latest release redirect and version selection",
+      "published checksum verification and mismatch refusal",
+      "missing release asset",
+      "preserve previous installations and existing files",
+      "printed export command can be executed directly"
+    ],
+    "publication": "Installer is local to this change; the documented public script URL requires merge to main.",
+    "published_release_install": {
+      "version": "0.1.0",
+      "platform": "darwin/arm64",
+      "status": "passed: latest-release resolution, actual GitHub asset download, SHA-256 verification and embedded-runtime startup",
+      "scope": "CLI installation; this does not qualify the published release for the restored MCP workflow"
+    },
+    "shell_integration": {
+      "default": "Configure PATH, OPSD_APP_ROOT and completion for the detected Bash, Zsh or Fish shell",
+      "runtime_verification": [
+        "real portable bundle in Bash: command discovery, registered completion and version execution",
+        "real portable bundle in Zsh: command discovery, registered completion and version execution"
+      ],
+      "fish_verification": "Generated conf.d hook, quoting and Fish-specific environment syntax covered by regression tests; Fish runtime not available locally",
+      "configuration_checks": [
+        "existing Bash startup/login content preserved",
+        "one hook per installation prefix after reinstall",
+        "reinstall selects the newest installed bundle",
+        "explicit shell/configuration directory selection",
+        "unsupported shell refused before installation",
+        "--no-shell-setup leaves shell configuration untouched"
+      ]
+    }
+  }
+}

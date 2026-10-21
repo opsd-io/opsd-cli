@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -59,6 +60,35 @@ class McpWorkspaceTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(*examples_by_workspace)
             self.assertEqual(original_cwd, workspace_snapshot(cwd))
             self.assertEqual({}, workspace_snapshot(workspace))
+
+    async def test_generated_configuration_runs_without_shell_ruby_in_gui_path(self):
+        with tempfile.TemporaryDirectory(prefix="opsd MCP generated config ") as root:
+            root = Path(root)
+            workspace, cwd = root / "selected workspace", root / "host cwd"
+            workspace.mkdir()
+            cwd.mkdir()
+            write_workspace(workspace)
+            generated = subprocess.check_output([
+                str(APP_ROOT / "bin/opsd-mcp"), "config", "--workspace-root", str(workspace),
+            ], cwd=cwd, env=server_environment(workspace), timeout=TIMEOUT)
+            entry = json.loads(generated)["mcpServers"]["opsd"]
+            self.assertTrue(Path(entry["command"]).is_absolute())
+            self.assertTrue(Path(entry["env"]["RUBY_BIN"]).is_absolute())
+            # GUI processes need not inherit the developer's Ruby or version-manager shims.
+            env = dict(entry["env"], PATH="/usr/bin:/bin")
+            params = StdioServerParameters(command=entry["command"], env=env, cwd=str(cwd))
+            async with asyncio.timeout(30):
+                async with Client(params, mode="2026-07-28", read_timeout_seconds=TIMEOUT) as client:
+                    contract = await self.read_json(client, "opsd://contract")
+                    self.assertEqual("opsd.io/v2alpha1", contract["api_version"])
+                    result = await client.call_tool("validate-manifest", {"manifest_path": "valid.yaml"})
+                    self.assertFalse(result.is_error, result.content)
+                    result = await client.call_tool("render-manifest", {
+                        "manifest_path": "valid.yaml", "output_dir": "generated",
+                    })
+                    self.assertFalse(result.is_error, result.content)
+                    self.assertTrue((workspace / "generated/main.tf").is_file())
+            self.assertEqual([], list(cwd.iterdir()))
 
     async def test_workspace_blueprints_paths_and_mutations_ignore_host_cwd(self):
         with tempfile.TemporaryDirectory(prefix="opsd MCP execution contexts ") as root:
