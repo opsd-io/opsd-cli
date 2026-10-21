@@ -167,8 +167,8 @@
     "local_bundle": "verified: real relocated runtime, generated MCP configuration and discovery",
     "download_mode": "verified with loopback release redirects, real curl and SHA-256 tools",
     "regression_suite": {
-      "tests": 198,
-      "assertions": 1459,
+      "tests": 203,
+      "assertions": 1499,
       "failures": 0
     },
     "checks": [
@@ -187,6 +187,22 @@
       "platform": "darwin/arm64",
       "status": "passed: latest-release resolution, actual GitHub asset download, SHA-256 verification and embedded-runtime startup",
       "scope": "CLI installation; this does not qualify the published release for the restored MCP workflow"
+    },
+    "shell_integration": {
+      "default": "Configure PATH, OPSD_APP_ROOT and completion for the detected Bash, Zsh or Fish shell",
+      "runtime_verification": [
+        "real portable bundle in Bash: command discovery, registered completion and version execution",
+        "real portable bundle in Zsh: command discovery, registered completion and version execution"
+      ],
+      "fish_verification": "Generated conf.d hook, quoting and Fish-specific environment syntax covered by regression tests; Fish runtime not available locally",
+      "configuration_checks": [
+        "existing Bash startup/login content preserved",
+        "one hook per installation prefix after reinstall",
+        "reinstall selects the newest installed bundle",
+        "explicit shell/configuration directory selection",
+        "unsupported shell refused before installation",
+        "--no-shell-setup leaves shell configuration untouched"
+      ]
     }
   }
 }

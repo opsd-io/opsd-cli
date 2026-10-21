@@ -13,6 +13,7 @@ class InstallerTest < Minitest::Test
   def setup
     @root = Dir.mktmpdir("opsd installer ")
     @prefix = File.join(@root, "installed ' bundles")
+    @shell_config = File.join(@root, "shell configuration")
     os = RUBY_PLATFORM.include?("darwin") ? "darwin" : "linux"
     arch = `uname -m`.strip.match?(/arm64|aarch64/) ? "arm64" : "amd64"
     @name = "opsd_0.1.0_#{os}_#{arch}"
@@ -20,7 +21,14 @@ class InstallerTest < Minitest::Test
     %w[bin runtime/bin].each { |path| FileUtils.mkdir_p(File.join(bundle, path)) }
     %w[bin/opsd bin/opsd-mcp runtime/bin/ruby].each do |path|
       file = File.join(bundle, path)
-      File.write(file, "#!/bin/sh\nprintf '0.1.0\\n'\n")
+      File.write(file, <<~SH)
+        #!/bin/sh
+        if [ "${1:-}" = completion ]; then
+          printf '_opsd() { :; }\\n'
+        else
+          printf '0.1.0\\n'
+        fi
+      SH
       FileUtils.chmod(0o755, file)
     end
     @archive = File.join(@root, "#{@name}.tar.gz")
@@ -35,8 +43,9 @@ class InstallerTest < Minitest::Test
     FileUtils.remove_entry(@root)
   end
 
-  def install(*arguments, input: "", env: {})
-    Open3.capture3(env, "sh", SCRIPT, "--prefix", @prefix, *arguments, stdin_data: input)
+  def install(*arguments, input: "", env: {}, shell_setup: false)
+    options = shell_setup ? ["--shell-config-dir", @shell_config] : ["--no-shell-setup"]
+    Open3.capture3(env, "sh", SCRIPT, "--prefix", @prefix, *options, *arguments, stdin_data: input)
   end
 
   def test_local_install_handles_spaces_quotes_and_preserves_previous_installation
@@ -109,6 +118,63 @@ class InstallerTest < Minitest::Test
     refute status.success?
     assert_includes stderr, "Release asset unavailable"
     refute File.exist?(@prefix)
+  end
+
+  def test_bash_setup_preserves_existing_config_and_activates_path_and_completion
+    FileUtils.mkdir_p(@shell_config)
+    File.write(File.join(@shell_config, ".bashrc"), "# existing shell configuration\n")
+    File.write(File.join(@shell_config, ".profile"), "# existing login configuration\n")
+    installed_root = nil
+    2.times do
+      output, stderr, status = install("--archive", @archive, "--shell", "bash", shell_setup: true)
+      assert status.success?, stderr
+      installed_root = output[/^Installed OPSd \S+ in (.+)$/, 1]
+    end
+    rc = File.read(File.join(@shell_config, ".bashrc"))
+    assert_includes rc, "# existing shell configuration"
+    assert_equal 1, rc.scan("# OPSd installer: PATH and completion").size
+    refute File.exist?(File.join(@shell_config, ".bash_profile"))
+    assert_includes File.read(File.join(@shell_config, ".profile")), "# existing login configuration"
+    stdout, stderr, status = Open3.capture3("bash", "--noprofile", "--norc", "-c",
+                                           'source "$1"; command -v opsd; type -t _opsd; opsd version',
+                                           "installer-test", File.join(@shell_config, ".bashrc"))
+    assert status.success?, stderr
+    assert_includes stdout, "#{installed_root}/bin/opsd"
+    assert_includes stdout, "function\n0.1.0"
+  end
+
+  def test_detects_zsh_and_uses_config_directory_override
+    _, stderr, status = install("--archive", @archive, shell_setup: true, env: { "SHELL" => "/bin/zsh" })
+    assert status.success?, stderr
+    assert File.file?(File.join(@shell_config, ".zshrc"))
+    init = File.read(File.join(@prefix, "shell/zsh/init.sh"))
+    assert_includes init, "autoload -Uz compinit"
+    assert_includes init, "export OPSD_APP_ROOT="
+  end
+
+  def test_fish_setup_uses_conf_d_and_fish_environment_syntax
+    _, stderr, status = install("--archive", @archive, "--shell", "fish", shell_setup: true)
+    assert status.success?, stderr
+    assert File.file?(File.join(@shell_config, "conf.d/opsd.fish"))
+    init = File.read(File.join(@prefix, "shell/fish/init.sh"))
+    assert_includes init, "set -gx OPSD_APP_ROOT"
+    assert_includes init, "set -gx PATH"
+    assert_includes init, "installed \\' bundles"
+  end
+
+  def test_unsupported_shell_fails_before_creating_files
+    _, stderr, status = install("--archive", @archive, "--shell", "unknown", shell_setup: true)
+    refute status.success?
+    assert_includes stderr, "Select --shell"
+    refute File.exist?(@prefix)
+    refute File.exist?(@shell_config)
+  end
+
+  def test_no_shell_setup_leaves_shell_configuration_untouched
+    _, stderr, status = install("--archive", @archive)
+    assert status.success?, stderr
+    refute File.exist?(@shell_config)
+    refute File.exist?(File.join(@prefix, "shell"))
   end
 
   private

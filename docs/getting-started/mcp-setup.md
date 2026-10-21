@@ -53,12 +53,18 @@ published bundle and verifies its release SHA-256 checksum. After
 curl -fsSL https://raw.githubusercontent.com/opsd-io/opsd-cli/main/scripts/install.sh -o install-opsd.sh && sh install-opsd.sh
 ```
 
-The installer prints the actual `export OPSD_APP_ROOT=...` command for your
-installation. Paste that command into the same terminal before continuing;
-a child installer cannot set variables in its parent shell. Each installation
+The installer configures `PATH`, `OPSD_APP_ROOT`, and shell completion for your
+Bash, Zsh, or Fish shell. Open a new terminal, or run the activation command
+printed by the installer before continuing in the current terminal. You can
+then run `opsd` and `opsd-mcp` directly. Each installation
 has its own directory under `~/opsd`, and existing installations are preserved.
 Use `--prefix` to choose another location or `--version` to select a release.
-The installer leaves shell startup files unchanged.
+Existing shell settings are preserved; rerunning the installer refreshes the
+OPSd setup without adding duplicate hooks for the same installation prefix.
+Use `--shell bash`, `--shell zsh`, or `--shell fish` to override shell detection.
+Use `--no-shell-setup` for automation or to manage shell configuration yourself.
+The installer respects `ZDOTDIR` for Zsh and `XDG_CONFIG_HOME` for Fish;
+`--shell-config-dir` selects a custom shell configuration directory.
 
 The published `v0.1.0` release predates this MCP qualification. Until a release
 containing these changes is available, use a bundle built from the matching
@@ -71,7 +77,7 @@ sh scripts/install.sh --local
 When prompted, paste the path to your downloaded or locally built archive,
 without surrounding quotes. This uses the same installer without downloading
 a release. The installer checks the archive's platform and embedded runtime,
-then prints the export command to use. Local archives do not have a downloaded
+then configures PATH and completion and prints the activation command. Local archives do not have a downloaded
 release checksum to verify. You do not need a host Ruby installation to run
 either installer path.
 

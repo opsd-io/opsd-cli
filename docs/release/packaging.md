@@ -16,10 +16,13 @@ the published SHA-256 checksum and checks the embedded runtime before installing
 curl -fsSL https://raw.githubusercontent.com/opsd-io/opsd-cli/main/scripts/install.sh -o install-opsd.sh && sh install-opsd.sh
 ```
 
-This URL becomes available when the installer reaches `main`. Run the export
-command printed by the installer to select the installed app root. The default
+This URL becomes available when the installer reaches `main`. Open a new
+terminal or run the printed activation command to use OPSd and its completion. The default
 installation directory is `~/opsd`; each installation is kept separately.
-No host Ruby or shell startup changes are required.
+No host Ruby is required. The installer adds PATH, app-root selection and
+completion to the detected Bash, Zsh, or Fish configuration, preserving existing
+settings. Reinstallation refreshes its setup without duplicate hooks. Use
+`--shell` to select a shell explicitly or `--no-shell-setup` to skip these changes.
 
 From a checkout, `sh scripts/install.sh --local` installs an archive you already
 have, while `sh scripts/install.sh --version 0.1.0` selects a published release.
