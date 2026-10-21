@@ -9,6 +9,10 @@ The launcher is:
 bin/opsd-mcp
 ```
 
+Check the [host compatibility matrix](./mcp-hosts.md#verified-compatibility)
+before choosing an application. A generated configuration entry does not prove
+that a host supports this server's protocol revision.
+
 To generate a ready-to-paste host configuration snippet, run:
 
 ```bash
@@ -22,7 +26,8 @@ bin/opsd-mcp config --workspace-root /path/to/workspace
 ```
 
 The command prints a JSON config block with `command` and `env` fields already
-pointing at the current checkout or bundle.
+pointing at the current checkout or bundle, including the absolute `RUBY_BIN`
+needed by GUI hosts that do not load shell initialization.
 
 ## Transport
 

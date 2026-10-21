@@ -3,6 +3,7 @@
 require "json"
 require "optparse"
 require "pathname"
+require "rbconfig"
 
 module OPSd
   class McpConfig
@@ -18,7 +19,8 @@ module OPSd
             "command" => @app_root.join("bin", "opsd-mcp").to_s,
             "env" => {
               "OPSD_APP_ROOT" => @app_root.to_s,
-              "OPSD_WORKSPACE_ROOT" => @workspace_root.to_s
+              "OPSD_WORKSPACE_ROOT" => @workspace_root.to_s,
+              "RUBY_BIN" => ruby_bin
             }
           }
         }
@@ -28,6 +30,15 @@ module OPSd
     def to_json
       JSON.pretty_generate(payload)
     end
+
+    # GUI hosts may not load shell initialization or rbenv/asdf shims.
+    def ruby_bin
+      bundled = @app_root.join("runtime", "bin", "ruby")
+      return bundled.to_s if bundled.executable?
+
+      Pathname(RbConfig.ruby).expand_path.to_s
+    end
+    private :ruby_bin
 
     def self.run(argv, app_root:, workspace_root:)
       options = parse_options(argv)

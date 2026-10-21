@@ -6,6 +6,7 @@ This repository keeps the canonical CLI documentation close to the code.
 
 - [Install](./getting-started/install.md)
 - [Setup](./getting-started/setup.md)
+- [MCP Setup: Checkout or Portable Bundle](./getting-started/mcp-setup.md)
 - [Quickstart](./getting-started/quickstart.md)
 - [Development Setup](./getting-started/development-setup.md)
 - [Release Packaging](./release/packaging.md)

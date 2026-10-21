@@ -30,6 +30,9 @@ opsd render manifest environment.yaml --output ./generated
 [quickstart](./docs/getting-started/quickstart.md), and
 [manifest reference](./docs/manifest.md) for details.
 
+For MCP, follow [Use OPSd Through MCP](./docs/getting-started/mcp-setup.md)
+with either a source checkout or portable bundle.
+
 See the [central OPSd contribution guide](https://github.com/opsd-io/.github/blob/main/CONTRIBUTING.md)
 for the required pull request and commit format, local checks, and
 release/testing workflow.
