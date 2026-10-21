@@ -10,7 +10,11 @@ permissions:
   pull-requests: write
 
 jobs:
+  mcp-qualification:
+    uses: ./.github/workflows/opsd-mcp-protocol.yml
+
   release:
+    needs: mcp-qualification
     uses: opsd-io/public-workflows/.github/workflows/release-please.yml@main
     with:
       release-type: ruby
